@@ -14,7 +14,7 @@ max_iter: 28000
 display: 10
 momentum: 0.9
 weight_decay: 0.0005
-#snapshot: 1000
+snapshot: 2000
 snapshot_prefix: "snapshots/sphere20"
 
 solver_mode: GPU
