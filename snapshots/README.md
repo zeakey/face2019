@@ -1,0 +1,1 @@
+# snapshots (caffemodels and solverstates)
