@@ -1,4 +1,4 @@
-net: "models/sphere20/solver.pt"
+net: "models/sphere20/train.pt"
 #test_iter: 100 
 #test_interval: 2000
 
