@@ -831,3 +831,10 @@ layer {
   bottom: "label"
   top: "softmax_loss"
 }
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "fc6"
+  bottom: "label"
+  top: "accuracy"
+}
