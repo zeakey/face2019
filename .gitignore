@@ -2,3 +2,7 @@ data/
 *.caffemodel
 *.solverstate
 *~
+*.txt
+*.mat
+*.pth
+*.pyc
