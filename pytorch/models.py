@@ -4,6 +4,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn import Parameter
 import math
+#from ops import AngleLinear1 as AngleLinear
 from ops import AngleLinear
 
 class Resnet20(nn.Module):
@@ -89,7 +90,7 @@ class Sphereface20(nn.Module):
     super(Sphereface20, self).__init__()
     self.num_class = num_class
     self.base = Resnet20()
-    self.fc6 = AngleLinear(dim, num_class)
+    self.fc6 = AngleLinear(dim, num_class, gamma=0.06)
   def forward(self, x, target=None):
     x = self.base(x)
     if self.training:
@@ -98,3 +99,32 @@ class Sphereface20(nn.Module):
     else:
       return x
 
+# sphereface20 center exclusive
+class Sphereface20exclusive(nn.Module):
+  def __init__(self, dim=512, num_class=10572):
+    super(Sphereface20exclusive, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = AngleLinear(dim, num_class, gamma=0.06, exclusive=True)
+  def forward(self, x, target=None):
+    x = self.base(x)
+    if self.training:
+      loss, exclusive_loss, lamb = self.fc6(x, target)
+      return loss, exclusive_loss, lamb
+    else:
+      return x
+
+# sphereface20 sample exclusive
+class SampleExclusive(nn.Module):
+  def __init__(self, dim=512, num_class=10572):
+    super(SampleExclusive, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = AngleLinear(dim, num_class, gamma=0.06)
+  def forward(self, x, target=None):
+    x = self.base(x)
+    if self.training:
+      loss, lamb = self.fc6(x, target)
+      return loss, x, lamb
+    else:
+      return x
