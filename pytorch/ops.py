@@ -39,6 +39,7 @@ class AngleLinear(nn.Module):
         super(AngleLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.weight = nn.Parameter(torch.Tensor(in_features,out_features))
         # options
         self.min_lambda = min_lambda
         self.lambda_base = lambda_base
