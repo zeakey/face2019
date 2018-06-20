@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 torch.backends.cudnn.bencmark = True
 
 import os, sys, random, datetime, time
-from os.path import isdir, isfile, isdir, join
+from os.path import isdir, isfile, isdir, join, dirname, abspath
 import argparse
 import numpy as np
 from PIL import Image
@@ -17,13 +17,18 @@ from scipy.io import savemat
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
+THIS_DIR = abspath(dirname(__file__))
+TMP_DIR = join(THIS_DIR, 'tmp')
+if not isdir(TMP_DIR):
+  os.makedirs(TMP_DIR)
+
 parser = argparse.ArgumentParser(description='PyTorch Implementation of HED.')
-parser.add_argument('--maxepoch', type=int, help='max epoch', default=30)
-parser.add_argument('--bs', type=int, help='batch size', default=700)
+parser.add_argument('--bs', type=int, help='batch size', default=512)
 # optimizer parameters
 parser.add_argument('--lr', type=float, help='base learning rate', default=0.1)
 parser.add_argument('--momentum', type=float, help='momentum', default=0.9)
-parser.add_argument('--stepsize', type=float, help='step size', default=10)
+parser.add_argument('--maxepoch', type=int, help='max epoch', default=30)
+parser.add_argument('--stepsize', type=float, help='step size (epoch)', default=18)
 parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 # general parameters
@@ -34,9 +39,10 @@ parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
 parser.add_argument('--checkpoint', type=str, help='checkpoint path', default="checkpoint")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
-# lfw options
-parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="lfw-112X96")
-parser.add_argument('--lfwlist', type=str, help='lfw image list', default='LFW_imagelist.txt')
+# datasets
+parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
+parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="data/lfw-112X96")
+parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
 
 assert isfile(args.lfwlist)
@@ -66,9 +72,9 @@ else:
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
 if args.train:
-  print("Pre-loading training data ~_~  please wiat ~_~")
+  print("Pre-loading training data...")
   train_dataset = datasets.ImageFolder(
-    "/media/data0/dataset/CASIA-WebFace-112X96",
+    args.casia,
     transforms.Compose([
       transforms.RandomHorizontalFlip(),
       transforms.ToTensor(),
@@ -129,8 +135,8 @@ def train_epoch(train_loader, model, criterion, optimizer, epoch):
     optimizer.step()
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec, average %.2fsec): Loss=%.3f, Average loss=%.3f, acc1=%.3f, Average acc=%.3f, lambda=%.3f" % \
-      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, batch_time.avg, losses.val, losses.avg, top1.val, top1.avg, lamb))
+      print("Epoch %d/%d Batch %d/%d, (batch time: %.2fsec): Loss=%.3f, acc1=%.3f, lambda=%.3f" % \
+      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, losses.val, top1.val, lamb))
 
 def test_lfw(model, imglist, filename):
   model.eval() # switch to evaluate mode
@@ -194,7 +200,7 @@ def save_checkpoint(state, filename):
     torch.save(state, filename)
 
 def main():
-  max_lfw_acc = 0
+  lfw_acc_history = np.zeros((args.maxepoch, ), np.float32)
   for epoch in range(args.maxepoch):
     scheduler.step() # will adjust learning rate
     if args.train:
@@ -203,16 +209,14 @@ def main():
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'optimizer' : optimizer.state_dict(),
-      }, filename=args.checkpoint + "epoch%d" % (epoch) + ".pth")
+      }, filename=join(TMP_DIR, args.checkpoint + "epoch%d" % (epoch) + ".pth"))
     # prepare data for testing
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc = test_lfw(model, imglist,
-                filename=args.checkpoint + "epoch%d" % (epoch) + ".pth-features.mat")
-    if lfw_acc > max_lfw_acc:
-      max_lfw_acc = lfw_acc
-    print("Epoch %d best LFW accuracy is %.3f." % (epoch, max_lfw_acc))
+    lfw_acc_history[epoch] = test_lfw(model, imglist,
+                filename=join(args.checkpoint + "epoch%d" % (epoch) + ".pth-features.mat"))
+    print("Epoch %d best LFW accuracy is %.3f." % (epoch, lfw_acc_history.max()))
 
 if __name__ == '__main__':
   main()
