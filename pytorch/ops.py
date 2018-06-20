@@ -39,8 +39,6 @@ class AngleLinear(nn.Module):
         super(AngleLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = nn.Parameter(torch.Tensor(in_features,out_features))
-        self.weight.data.uniform_(-1, 1).renorm_(2,1,1e-5).mul_(1e5)
         # options
         self.min_lambda = min_lambda
         self.lambda_base = lambda_base
@@ -56,6 +54,11 @@ class AngleLinear(nn.Module):
             lambda x: 8*x**4-8*x**2+1,
             lambda x: 16*x**5-20*x**3+5*x
         ]
+        self.reset_parameters()
+
+    def reset_parameters(self):
+      stdv = 1. / math.sqrt(self.weight.size(1))
+      self.weight.data.uniform_(-stdv, stdv)
 
     def forward(self, input, target):
       self.iter = self.iter + 1
