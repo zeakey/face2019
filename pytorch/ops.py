@@ -91,3 +91,24 @@ class AngleLinear(nn.Module):
       output[index] += phi_theta[index] * (1.0 + 0) / (1 + self.lamb)
       return (output, self.lamb) # size=(B,Classnum,2)
 
+class SampleExclusiveLoss(nn.Module):
+  def __init__(self):
+    super(SampleExclusiveLoss, self).__init__()
+    self.it = 0
+
+  def forward(self, x, target):
+    self.it += 1
+    batch_size = x.size()[0]
+    target = target.view(-1,1) #size=(B,1)
+    x_norm = torch.nn.functional.normalize(x, p=2, dim=1)
+    cos_sim = torch.matmul(x_norm, torch.t(x_norm))
+    cos_sim1 = cos_sim.detach() # only used to find nearest neighbour
+    label = target.view(-1, 1).repeat(1, batch_size) # [batch_size x batch_size]
+    label = (label == label.t())
+    cos_sim1[label] = -100
+    cos_sim1.scatter_(1, torch.arange(batch_size).view(-1, 1).long().cuda(), -100) # fill diagonal with -100
+    _, indices = torch.max(cos_sim1, dim=0) # find the largest of each row
+    label = torch.zeros((batch_size, batch_size)).cuda()
+    label.scatter_(1, indices.view(-1, 1).long(), 1) # fill with 1
+    loss = torch.sum(torch.mul(label, cos_sim)) / batch_size # NOTE here we use cos_sim (not cos_sim1) that is traced by the gradient graph
+    return loss
