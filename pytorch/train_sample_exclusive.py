@@ -17,6 +17,8 @@ from scipy.io import savemat
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 THIS_DIR = abspath(dirname(__file__))
@@ -136,7 +138,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
     if batch_idx % args.print_freq == 0:
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss0=%.3f (* 1), loss1=%.3f (* %.4f), acc1=%.3f, lambda=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss0.val, loss1.val, exclusive_weight, top1.val, lamb))
-    train_record[batch_idx, :] = np.array([loss0.val, loss1.val, top1.val])
+    train_record[batch_idx, :] = np.array([loss0.avg, loss1.avg, top1.avg / float(100)])
   return train_record
 
 def test_lfw(model, imglist, epoch):
