@@ -5,8 +5,10 @@ import torch.nn.functional as F
 from torch.nn import Parameter
 import math
 #from ops import AngleLinear1 as AngleLinear
-from ops import AngleLinear
-
+from ops import AngleLinear, ExclusiveLinear, NormedLinear
+#==================================================================#
+# the base architecture
+#==================================================================#
 class Resnet20(nn.Module):
     def __init__(self, dim=512):
         super(Resnet20, self).__init__()
@@ -84,7 +86,40 @@ class Resnet20(nn.Module):
         x = self.fc5(x)
         return x
 
-# sphereface20
+#==================================================================#
+# baseline model with cross-entropy loss
+#==================================================================#
+class Baseline(nn.Module):
+  def __init__(self, dim=512, num_class=10572):
+    super(Baseline, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = nn.Linear(dim, num_class)
+  def forward(self, x):
+    x = self.base(x)
+    if self.training:
+      x = self.fc6(x)
+    return x
+
+#==================================================================#
+# cross-entropy loss with normalized data and weights
+#==================================================================#
+class Normed(nn.Module):
+  def __init__(self, dim=512, num_class=10572, radius=10):
+    super(Normed, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.radius = radius
+    self.fc6 = NormedLinear(dim, num_class, radius=self.radius)
+  def forward(self, x):
+    x = self.base(x)
+    if self.training:
+      x = self.fc6(x)
+    return x
+
+#==================================================================#
+# sphereface20 with angular margin inner-product (AngleLinear) layer
+#==================================================================#
 class Sphereface20(nn.Module):
   def __init__(self, dim=512, num_class=10572):
     super(Sphereface20, self).__init__()
@@ -99,22 +134,9 @@ class Sphereface20(nn.Module):
     else:
       return x
 
-# sphereface20 center exclusive
-class Sphereface20exclusive(nn.Module):
-  def __init__(self, dim=512, num_class=10572):
-    super(Sphereface20exclusive, self).__init__()
-    self.num_class = num_class
-    self.base = Resnet20()
-    self.fc6 = AngleLinear(dim, num_class, gamma=0.06, exclusive=True)
-  def forward(self, x, target=None):
-    x = self.base(x)
-    if self.training:
-      loss, exclusive_loss, lamb = self.fc6(x, target)
-      return loss, exclusive_loss, lamb
-    else:
-      return x
-
+#==================================================================#
 # sphereface20 sample exclusive
+#==================================================================#
 class SampleExclusive(nn.Module):
   def __init__(self, dim=512, num_class=10572):
     super(SampleExclusive, self).__init__()
@@ -122,9 +144,26 @@ class SampleExclusive(nn.Module):
     self.base = Resnet20()
     self.fc6 = AngleLinear(dim, num_class, gamma=0.06)
   def forward(self, x, target=None):
-    x = self.base(x)
+    feature = self.base(x)
     if self.training:
-      loss, lamb = self.fc6(x, target)
-      return loss, x, lamb
+      prob, lamb = self.fc6(feature, target)
+      return prob, feature, lamb
     else:
-      return x
+      return feature
+
+#==================================================================#
+# sphereface20 center exclusive
+#==================================================================#
+class CenterExclusive(nn.Module):
+  def __init__(self, dim=512, num_class=10572):
+    super(CenterExclusive, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = ExclusiveLinear(dim, num_class)
+  def forward(self, x):
+    feature = self.base(x)
+    if self.training:
+      prob, exclusive_loss = self.fc6(feature)
+      return prob, exclusive_loss
+    else:
+      return feature
