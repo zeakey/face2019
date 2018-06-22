@@ -6,16 +6,16 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim import lr_scheduler
 torch.backends.cudnn.bencmark = True
-
 import os, sys, random, datetime, time
 from os.path import isdir, isfile, isdir, join, dirname, abspath
 import argparse
 import numpy as np
 from PIL import Image
 from scipy.io import savemat
-
+import math
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from utils import accuracy, test_lfw, AverageMeter, save_checkpoint
 
 THIS_DIR = abspath(dirname(__file__))
 TMP_DIR = join(THIS_DIR, 'tmp')
@@ -41,73 +41,43 @@ parser.add_argument('--checkpoint', type=str, help='checkpoint path', default="c
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
+parser.add_argument('--num_class', type=int, help='num classes', default=10572)
 parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="data/lfw-112X96")
 parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
+args.checkpoint = join(TMP_DIR, args.checkpoint)
 
-assert isfile(args.lfwlist)
-assert isdir(args.lfw)
+# check and assertations
+assert isfile(args.lfwlist) and isdir(args.lfw)
 
-if args.cuda == 0:
-  args.cuda = False
-elif args.cuda == 1:
-  args.cuda = True
-else:
-  raise ValueError("args.cuda must be ether 0 or 1")
-  
-if args.train == 0:
-  args.train = False
-elif args.train == 1:
-  args.train = True
-else:
-  raise ValueError("args.cuda must be ether 0 or 1")
+# manually asign random seed
+torch.manual_seed(666)
 
-if args.angle_linear == 0:
-  args.angle_linear = False
-elif args.angle_linear == 1:
-  args.angle_linear = True
-else:
-  raise ValueError("args.cuda must be ether 0 or 1")
-
-normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-if args.train:
-  print("Pre-loading training data...")
-  train_dataset = datasets.ImageFolder(
-    args.casia,
-    transforms.Compose([
-      transforms.RandomHorizontalFlip(),
-      transforms.ToTensor(),
-      normalize,
-    ])
-  )
-  train_loader = torch.utils.data.DataLoader(
+# data loading code
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+train_dataset = datasets.ImageFolder(
+  args.casia,
+  transforms.Compose([
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    normalize,
+  ]))
+train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.bs, shuffle=True,
     num_workers=12, pin_memory=True
-  )
-  print("Done! Data have been preloaded^_^")
-
+)
 # transforms for LFW testing data
 test_transform = transforms.Compose([
   transforms.ToTensor(),
   normalize
 ])
-
-# model and optimizer
-from models import Sphereface20
+# model
 print("Loading model...")
-model = Sphereface20(num_class=10575)
-
+from models import Sphereface20
+model = Sphereface20(num_class=args.num_class).cuda()
 criterion = nn.CrossEntropyLoss()
-
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
-
-if args.stepsize > 0:
-  scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
-
-if args.cuda:
-  print("Transporting model to GPU(s)...")
-  model.cuda()
+scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
 
 def train_epoch(train_loader, model, criterion, optimizer, epoch):
   losses = AverageMeter()
@@ -117,9 +87,8 @@ def train_epoch(train_loader, model, criterion, optimizer, epoch):
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
     start_time = time.time()
-    if args.cuda:
-      data = data.cuda()
-      label = label.cuda(non_blocking=True)
+    data = data.cuda()
+    label = label.cuda(non_blocking=True)
     output, lamb = model(data, label)
     loss = criterion(output, label)
     # measure accuracy and record loss
@@ -138,66 +107,6 @@ def train_epoch(train_loader, model, criterion, optimizer, epoch):
       print("Epoch %d/%d Batch %d/%d, (batch time: %.2fsec): Loss=%.3f, acc1=%.3f, lambda=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, losses.val, top1.val, lamb))
 
-def test_lfw(model, imglist, filename):
-  model.eval() # switch to evaluate mode
-  features = np.zeros((len(imglist), 512 * 2), dtype=np.float32)
-  with torch.no_grad():
-    for idx, i in enumerate(imglist):
-      assert isfile(i), "Image %s doesn't exist." % i
-      im = Image.open(i).convert('RGB')
-      data0 = test_transform(im)
-      data1 = test_transform(im.transpose(Image.FLIP_LEFT_RIGHT))
-      # add extra axis ahead
-      data0 = data0.unsqueeze(0)
-      data1 = data1.unsqueeze(0)
-      data = torch.cat((data0, data1), dim=0)
-      if args.cuda:
-        data = data.cuda()
-      output = model(data)
-      if args.cuda:
-        output = output.cpu()
-      output = output.numpy().flatten()
-      features[idx, :] = output
-    from test_lfw import fold10
-    lfw_acc = fold10(features, cache_fn=filename+".txt")
-    savemat(filename, dict({"features": features}))
-    return lfw_acc
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
-
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-        res = []
-        for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-def save_checkpoint(state, filename):
-    torch.save(state, filename)
 
 def main():
   lfw_acc_history = np.zeros((args.maxepoch, ), np.float32)
@@ -209,14 +118,13 @@ def main():
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'optimizer' : optimizer.state_dict(),
-      }, filename=join(TMP_DIR, args.checkpoint + "epoch%d" % (epoch) + ".pth"))
+      }, filename=args.checkpoint + "-epoch%d" % (epoch) + ".pth")
     # prepare data for testing
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc_history[epoch] = test_lfw(model, imglist,
-                filename=join(args.checkpoint + "epoch%d" % (epoch) + ".pth-features.mat"))
-    print("Epoch %d best LFW accuracy is %.3f." % (epoch, lfw_acc_history.max()))
+    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, args.checkpoint+'-epoch%d' % epoch)
+    print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
 
 if __name__ == '__main__':
   main()
