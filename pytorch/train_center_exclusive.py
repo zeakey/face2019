@@ -37,7 +37,7 @@ parser.add_argument('--print_freq', type=int, help='print frequency', default=50
 parser.add_argument('--train', type=int, help='train or not', default=1)
 parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
-parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="checkpoint")
+parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="center_exclusive")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
