@@ -1,3 +1,4 @@
+# multi-class cross-entropy loss with center-exclusive
 from __future__ import print_function
 import torch
 import torch.nn as nn
@@ -28,15 +29,15 @@ parser.add_argument('--bs', type=int, help='batch size', default=600)
 parser.add_argument('--lr', type=float, help='base learning rate', default=0.1)
 parser.add_argument('--momentum', type=float, help='momentum', default=0.9)
 parser.add_argument('--stepsize', type=float, help='step size (epoch)', default=18)
-parser.add_argument('--gamma', type=float, help='gamma', default=0.5)
+parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
-parser.add_argument('--maxepoch', type=int, help='max epoch', default=30)
+parser.add_argument('--maxepoch', type=int, help='maximal training epoch', default=30)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
 parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
-parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="normed")
+parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="checkpoint")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
@@ -81,37 +82,48 @@ test_transform = transforms.Compose([
 ])
 
 # model and optimizer
-from models import Normed
+from models import CenterExclusive
 print("Loading model...")
-model = Normed(num_class=args.num_class).cuda()
+model = CenterExclusive(num_class=args.num_class, norm_data=True)
 print("Done!")
 
 # optimizer related
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
+# scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[16, 24, 28], gamma=args.gamma)
+
+if args.cuda:
+  print("Transporting model to GPU(s)...")
+  model.cuda()
+  print("Done!")
 
 def train_epoch(train_loader, model, optimizer, epoch):
   # recording
-  losses = AverageMeter()
+  loss_cls = AverageMeter()
+  loss_exc = AverageMeter()
   top1 = AverageMeter()
   batch_time = AverageMeter()
-  train_record = np.zeros((len(train_loader), 2), np.float32) # loss top1acc
+  train_record = np.zeros((len(train_loader), 3), np.float32) # loss exc_loss top1-acc
   # exclusive loss weight
   #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = 10
+  exclusive_weight = 2
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
     start_time = time.time()
-    data = data.cuda()
-    label = label.cuda(non_blocking=True)
-    prob = model(data)
+    if args.cuda:
+      data = data.cuda()
+      label = label.cuda(non_blocking=True)
+    prob, center_exclusive_loss = model(data)
     loss = criterion(prob, label)
     # measure accuracy and record loss
     prec1, prec5 = accuracy(prob, label, topk=(1, 5))
-    losses.update(loss.item(), data.size(0))
+    loss_cls.update(loss.item(), data.size(0))
+    loss_exc.update(center_exclusive_loss.item(), data.size(0))
     top1.update(prec1[0], data.size(0))
+    # collect losses
+    loss = loss + exclusive_weight * center_exclusive_loss
     # clear cached gradient
     optimizer.zero_grad()
     # backward gradient
@@ -120,9 +132,9 @@ def train_epoch(train_loader, model, optimizer, epoch):
     optimizer.step()
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss=%.3f, acc1=%.3f" % \
-      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, losses.val,  top1.val))
-    train_record[batch_idx, :] = np.array([losses.avg, top1.avg / float(100)])
+      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f" % \
+      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val, loss_exc.val, exclusive_weight, top1.val))
+    train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, top1.avg / float(100)])
   return train_record
 
 def main():
@@ -149,16 +161,17 @@ def main():
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"train_record": train_record,
                   "lfw_acc_history": lfw_acc_history}))
-    plt.plot(train_record[:, 0]) # loss
-    plt.plot(train_record[:, 1]) # top1acc
+    plt.plot(train_record[:, 0]) # loss0
+    plt.plot(train_record[:, 1]) # loss1
+    plt.plot(train_record[:, 2]) # top1 acc
     plt.plot(np.arange(0, train_record.shape[0], train_record.shape[0] / args.maxepoch), lfw_acc_history)
-    plt.legend(['loss', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
+    plt.legend(['loss cross entropy', 'loss exclusive', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
   else:
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"lfw_acc_history": lfw_acc_history}))
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
-  plt.savefig(args.checkpoint + 'record.pdf')
+  plt.savefig(args.checkpoint + '-record.pdf')
 
 if __name__ == '__main__':
   main()
