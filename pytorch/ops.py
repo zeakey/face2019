@@ -12,6 +12,7 @@ class NormedLinear(nn.Module):
     self.radius = float(radius)
     # learning rate of radius
     self.weight = nn.Parameter(torch.randn(self.num_class, self.feat_dim))
+    self.reset_parameters()
   
   def reset_parameters(self):
     stdv = 1. / math.sqrt(self.weight.size(1))
@@ -27,14 +28,14 @@ class NormedLinear(nn.Module):
 
 # Normalized Linear with center exclusive
 class ExclusiveLinear(nn.Module):
-  def __init__(self, feat_dim=512, num_class=10572, norm_data=False, radius=32):
+  def __init__(self, feat_dim=512, num_class=10572, norm_data=True, radius=10):
     super(ExclusiveLinear, self).__init__()
     self.num_class = num_class
     self.feat_dim = feat_dim
     self.norm_data = norm_data
     self.radius = float(radius)
     self.weight = nn.Parameter(torch.randn(self.num_class, self.feat_dim))
-
+    self.reset_parameters()
   def reset_parameters(self):
     stdv = 1. / math.sqrt(self.weight.size(1))
     self.weight.data.uniform_(-stdv, stdv)
@@ -117,7 +118,9 @@ class AngleLinear(nn.Module):
       output[index] += phi_theta[index] * (1.0 + 0) / (1 + self.lamb)
       return (output, self.lamb) # size=(B,Classnum,2)
 
+#===========================================================================
 # AngleLinear with Center Exclusive
+#===========================================================================
 class ExclusiveAngleLinear(nn.Module):
     def __init__(self, in_features, out_features, m = 4, min_lambda=5, lambda_base=1000, gamma=0.12, power=-1):
         super(AngleLinear, self).__init__()
@@ -178,7 +181,7 @@ class ExclusiveAngleLinear(nn.Module):
       output[index] -= cos_theta[index] * (1.0 + 0) / (1 + self.lamb)
       output[index] += phi_theta[index] * (1.0 + 0) / (1 + self.lamb)
 
-      # weight exclusive
+      # weight (center) exclusive
       weight_norm = torch.nn.functional.normalize(self.weight, p=2, dim=1)
       cos = torch.mm(weight_norm, weight_norm.t())
       cos.clamp(-1, 1)
@@ -191,6 +194,9 @@ class ExclusiveAngleLinear(nn.Module):
 
       return (output, exclusive_loss, self.lamb) # size=(B,Classnum,2)
 
+#===========================================================================
+# Sample Exclusive Loss
+#===========================================================================
 class SampleExclusiveLoss(nn.Module):
   def __init__(self):
     super(SampleExclusiveLoss, self).__init__()
@@ -211,4 +217,23 @@ class SampleExclusiveLoss(nn.Module):
     label = torch.zeros((batch_size, batch_size)).cuda()
     label.scatter_(1, indices.view(-1, 1).long(), 1) # fill with 1
     loss = torch.sum(torch.mul(label, cos_sim)) / batch_size # NOTE here we use cos_sim (not cos_sim1) that is traced by the gradient graph
+    return loss
+
+#===========================================================================
+# Angular version of `center-loss`
+#===========================================================================
+class AngleCenterLoss(nn.Module):
+  def __init__(self, num_class=10572, feat_dim=512):
+    super(AngleCenterLoss, self).__init__()
+    self.num_class = num_class
+    self.feat_dim = feat_dim
+    self.centers = nn.Parameter(torch.randn(self.num_class, self.feat_dim).cuda())
+  def forward(self, x, label):
+    batch_size = x.size(0)
+    normed_centers = torch.nn.functional.normalize(self.centers, p=2, dim=1)
+    normed_data = torch.nn.functional.normalize(x, p=2, dim=1)
+    centers1 = torch.index_select(normed_centers, dim=0, index=label)
+    cos = torch.sum(torch.mul(normed_data, centers1), dim=1)
+    cos = cos.clamp(-1, 1)
+    loss = 1 - torch.mean(cos)
     return loss

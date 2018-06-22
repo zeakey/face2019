@@ -135,7 +135,7 @@ class Sphereface20(nn.Module):
       return x
 
 #==================================================================#
-# sphereface20 sample exclusive
+# Sphereface20 (with margin inner-product) + sample exclusive
 #==================================================================#
 class SampleExclusive(nn.Module):
   def __init__(self, dim=512, num_class=10572):
@@ -152,10 +152,10 @@ class SampleExclusive(nn.Module):
       return feature
 
 #==================================================================#
-# sphereface20 center exclusive
+# center exclusive
 #==================================================================#
 class CenterExclusive(nn.Module):
-  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=32):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
     super(CenterExclusive, self).__init__()
     self.num_class = num_class
     self.base = Resnet20()
@@ -165,5 +165,23 @@ class CenterExclusive(nn.Module):
     if self.training:
       prob, exclusive_loss = self.fc6(feature)
       return prob, exclusive_loss
+    else:
+      return feature
+
+#==================================================================#
+# centerloss + center-exclusve
+#==================================================================#
+class CenterLossExclusive(nn.Module):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=32):
+    super(CenterLossExclusive, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = ExclusiveLinear(dim, num_class, norm_data=norm_data, radius=radius)
+  def forward(self, x):
+    feature = self.base(x) # batch_size x 512
+    if self.training:
+      prob, exclusive_loss = self.fc6(feature)
+      # the returned feature with be used to calculate center-loss
+      return prob, feature, exclusive_loss
     else:
       return feature
