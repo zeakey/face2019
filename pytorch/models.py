@@ -155,11 +155,11 @@ class SampleExclusive(nn.Module):
 # sphereface20 center exclusive
 #==================================================================#
 class CenterExclusive(nn.Module):
-  def __init__(self, dim=512, num_class=10572):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=32):
     super(CenterExclusive, self).__init__()
     self.num_class = num_class
     self.base = Resnet20()
-    self.fc6 = ExclusiveLinear(dim, num_class)
+    self.fc6 = ExclusiveLinear(dim, num_class, norm_data=norm_data, radius=radius)
   def forward(self, x):
     feature = self.base(x)
     if self.training:

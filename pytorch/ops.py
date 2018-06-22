@@ -25,6 +25,7 @@ class NormedLinear(nn.Module):
     # see https://github.com/pytorch/pytorch/blob/372d1d67356f054db64bdfb4787871ecdbbcbe0b/torch/nn/modules/linear.py#L55
     return torch.nn.functional.linear(x_norm, weight_norm)
 
+# Normalized Linear with center exclusive
 class ExclusiveLinear(nn.Module):
   def __init__(self, feat_dim=512, num_class=10572, norm_data=False, radius=32):
     super(ExclusiveLinear, self).__init__()
