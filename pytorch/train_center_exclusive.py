@@ -32,6 +32,7 @@ parser.add_argument('--stepsize', type=float, help='step size (epoch)', default=
 parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 parser.add_argument('--maxepoch', type=int, help='maximal training epoch', default=30)
+parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=10)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
@@ -46,10 +47,10 @@ parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="
 parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
 
-assert isfile(args.lfwlist)
-assert isdir(args.lfw)
+assert isfile(args.lfwlist) and isdir(args.lfw)
+assert args.exclusive_weight > 0
 assert args.cuda == 1
-args.checkpoint = join(TMP_DIR, args.checkpoint)
+args.checkpoint = join(TMP_DIR, args.checkpoint+"exclusive_weight%.3f" % args.exclusive_weight)
 if args.train == 0:
   args.train = False
 elif args.train == 1:
@@ -107,7 +108,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
   train_record = np.zeros((len(train_loader), 3), np.float32) # loss exc_loss top1-acc
   # exclusive loss weight
   #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = 2
+  exclusive_weight = args.exclusive_weight
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
@@ -171,6 +172,9 @@ def main():
             dict({"lfw_acc_history": lfw_acc_history}))
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
+  plt.ylim(0, 4)
+  plt.grid(True)
+  plt.title("cross-entropy loss + center-exclusive$\\times$%.3f" % args.exclusive_weight)
   plt.savefig(args.checkpoint + '-record.pdf')
 
 if __name__ == '__main__':
