@@ -78,7 +78,7 @@ def fold10(features, cache_fn='lfw_result.txt', silent=False):
     print("Average accuracy: %f, average threshold: %f " % (cache_data[0:10, 1].mean(), cache_data[0:10, 0].mean()))
     print("=========The End=========")
   cache_data[10, :] = np.array([best_thres, cache_data[0:10, 1].mean()])
-  np.savetxt(cache_fn, cache_data)
+  np.savetxt(cache_fn, cache_data, fmt="%.5f")
   if not silent:
     print("Done, evaluation results have been saved at \"%s\"" % cache_fn)
   return cache_data[0:10, 1].mean()
