@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.nn import Parameter
 import math
 #from ops import AngleLinear1 as AngleLinear
-from ops import AngleLinear, ExclusiveLinear, NormedLinear
+from ops import AngleLinear, ExclusiveLinear, NormedLinear, CenterlossExclusiveLinear
 #==================================================================#
 # the base architecture
 #==================================================================#
@@ -172,7 +172,7 @@ class CenterExclusive(nn.Module):
 # centerloss + center-exclusve
 #==================================================================#
 class CenterLossExclusive(nn.Module):
-  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=32):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
     super(CenterLossExclusive, self).__init__()
     self.num_class = num_class
     self.base = Resnet20()
@@ -183,5 +183,26 @@ class CenterLossExclusive(nn.Module):
       prob, exclusive_loss = self.fc6(feature)
       # the returned feature with be used to calculate center-loss
       return prob, feature, exclusive_loss
+    else:
+      return feature
+
+#==================================================================#
+# centerloss + center-exclusve
+# integrate center-loss and exclusive-loss into one operator
+# and reuse the linear weights as centers
+#==================================================================#
+class CenterLossExclusive1(nn.Module):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
+    super(CenterLossExclusive1, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = CenterlossExclusiveLinear(dim, num_class,
+                        norm_data=norm_data, radius=radius)
+  def forward(self, x, target=None):
+    feature = self.base(x) # batch_size x 512
+    if self.training:
+      assert target is not None
+      prob, exclusive_loss, centerloss = self.fc6(feature, target)
+      return prob, exclusive_loss, centerloss
     else:
       return feature
