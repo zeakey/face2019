@@ -55,8 +55,8 @@ assert isdir(args.lfw)
 assert args.cuda == 1
 assert args.center_weight > 0 and args.exclusive_weight > 0
 
-args.checkpoint = join(TMP_DIR, args.checkpoint) + "center_weight%.3f-exclusive_weight%.3f" % \
-                                     (args.center_weight, args.exclusive_weight)
+args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight%.3f-exclusive_weight%.3f-radius%.3f" % \
+                                     (args.center_weight, args.exclusive_weight, args.radius)
 if args.train == 0:
   args.train = False
 elif args.train == 1:
