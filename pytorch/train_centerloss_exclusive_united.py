@@ -111,21 +111,23 @@ def train_epoch(train_loader, model, optimizer, epoch):
   top1 = AverageMeter()
   batch_time = AverageMeter()
   train_record = np.zeros((len(train_loader), 4), np.float32) # loss exc_loss center_loss top1-acc
-  # exclusive loss weight
-  #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = args.exclusive_weight
-  center_loss_weight = args.center_weight
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
+    it = epoch * len(train_loader) + batch_idx
+    #=====================================================================
+    # adjust you loss weight (s) here
+    exclusive_weight = float(args.exclusive_weight)
+    center_weight = float(args.center_weight * (1 - np.exp(-it * 0.001)))
+    #=====================================================================
     start_time = time.time()
     if args.cuda:
       data = data.cuda()
       label = label.cuda(non_blocking=True)
     prob, exclusive_loss, center_loss = model(data, label)
     cls_loss = criterion(prob, label)
-    loss = cls_loss + args.exclusive_weight * exclusive_loss \
-                        + args.center_weight * center_loss
+    loss = cls_loss + exclusive_weight * exclusive_loss \
+                    + center_weight * center_loss
     # measure accuracy and record loss
     prec1, prec5 = accuracy(prob, label, topk=(1, 5))
     loss_cls.update(cls_loss.item(), data.size(0))
@@ -143,7 +145,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
     if batch_idx % args.print_freq == 0:
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), loss-cent=%.5f (* %.4f), acc1=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val, \
-      loss_exc.val, exclusive_weight, loss_center.val, center_loss_weight, top1.val))
+      loss_exc.val, exclusive_weight, loss_center.val, center_weight, top1.val))
     train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, loss_center.avg, top1.avg / float(100)])
   return train_record
 
@@ -171,12 +173,16 @@ def main():
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"train_record": train_record,
                   "lfw_acc_history": lfw_acc_history}))
-    plt.plot(train_record[:, 0]) # loss cls
-    plt.plot(train_record[:, 1]) # loss exclusive
-    plt.plot(train_record[:, 1]) # loss center
-    plt.plot(train_record[:, 3]) # top1 acc
-    plt.plot(np.arange(0, train_record.shape[0], train_record.shape[0] / args.maxepoch), lfw_acc_history)
-    plt.legend(['cross entropy loss', 'exclusive loss', 'center loss', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
+    iter_per_epoch = train_record.shape[0] / args.maxepoch # iterations per epoch
+    plt.plot(train_record[:, 0] / 10, 'r') # loss cls / 10
+    plt.plot(train_record[:, 1], 'g') # loss exclusive
+    plt.plot(train_record[:, 1], 'b') # loss center
+    plt.plot(train_record[:, 3], 'c') # top1 acc
+    plt.plot(np.arange(0, train_record.shape[0], iter_per_epoch), lfw_acc_history, 'm')
+    max_acc_epoch = np.argmax(lfw_acc_history)
+    plt.plot(max_acc_epoch * iter_per_epoch, lfw_acc_history[max_acc_epoch], 'm*', markersize=12)
+
+    plt.legend(['cross entropy loss (*0.1)', 'exclusive loss', 'center loss', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
   else:
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"lfw_acc_history": lfw_acc_history}))
@@ -184,7 +190,8 @@ def main():
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
   plt.ylim(0, 4)
   plt.grid(True)
-  plt.savefig(args.checkpoint + 'record.pdf')
+  plt.title("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
+  plt.savefig(args.checkpoint + '-record.pdf')
 
 if __name__ == '__main__':
   main()
