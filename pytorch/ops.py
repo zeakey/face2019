@@ -26,7 +26,9 @@ class NormedLinear(nn.Module):
     # see https://github.com/pytorch/pytorch/blob/372d1d67356f054db64bdfb4787871ecdbbcbe0b/torch/nn/modules/linear.py#L55
     return torch.nn.functional.linear(x_norm, weight_norm)
 
+#===========================================================================
 # Normalized Linear with center exclusive
+#===========================================================================
 class ExclusiveLinear(nn.Module):
   def __init__(self, feat_dim=512, num_class=10572, norm_data=True, radius=10):
     super(ExclusiveLinear, self).__init__()
@@ -56,6 +58,46 @@ class ExclusiveLinear(nn.Module):
       x = x * self.radius
     # see https://github.com/pytorch/pytorch/blob/372d1d67356f054db64bdfb4787871ecdbbcbe0b/torch/nn/modules/linear.py#L55
     return torch.nn.functional.linear(x, weight_norm), exclusive_loss
+
+#===========================================================================
+# Normalized Linear with center exclusive and center loss
+#===========================================================================
+class CenterlossExclusiveLinear(nn.Module):
+  def __init__(self, feat_dim=512, num_class=10572, norm_data=True, radius=10):
+    super(CenterlossExclusiveLinear, self).__init__()
+    self.num_class = num_class
+    self.feat_dim = feat_dim
+    self.norm_data = norm_data
+    self.radius = float(radius)
+    self.weight = nn.Parameter(torch.randn(self.num_class, self.feat_dim))
+    self.reset_parameters()
+  def reset_parameters(self):
+    stdv = 1. / math.sqrt(self.weight.size(1))
+    self.weight.data.uniform_(-stdv, stdv)
+
+  def forward(self, x, target):
+    # normalize features and weight
+    weight_norm = torch.nn.functional.normalize(self.weight, p=2, dim=1)
+    # exclusive loss
+    cos = torch.mm(weight_norm, weight_norm.t())
+    cos.clamp(-1, 1)
+    cos1 = cos.detach() # used to index nearest neighbour
+    cos1.scatter_(1, torch.arange(self.num_class).view(-1, 1).long().cuda(), -100) # fill diagonal with -100
+    _, indices = torch.max(cos1, dim=0)
+    mask = torch.zeros((self.num_class, self.num_class)).cuda()
+    mask.scatter_(1, indices.view(-1, 1).long(), 1) # fill with 1
+    exclusive_loss = torch.dot(cos.view(cos.numel()), mask.view(mask.numel())) / self.num_class # average
+    # center loss
+    normed_data = torch.nn.functional.normalize(x, p=2, dim=1)
+    centers1 = torch.index_select(weight_norm, dim=0, index=target)
+    cos1 = torch.sum(torch.mul(normed_data, centers1), dim=1)
+    cos1 = cos1.clamp(-1, 1)
+    center_loss = 1 - torch.mean(cos1)
+    if self.norm_data:
+      x = torch.nn.functional.normalize(x, p=2, dim=1)
+      x = x * self.radius
+    # see https://github.com/pytorch/pytorch/blob/372d1d67356f054db64bdfb4787871ecdbbcbe0b/torch/nn/modules/linear.py#L55
+    return torch.nn.functional.linear(x, weight_norm), exclusive_loss, center_loss
 
 class AngleLinear(nn.Module):
     def __init__(self, in_features, out_features, m = 4, min_lambda=5, lambda_base=1000, gamma=0.12, power=-1):
