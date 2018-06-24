@@ -34,6 +34,8 @@ parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 parser.add_argument('--maxepoch', type=int, help='maximal training epoch', default=30)
 parser.add_argument('--center_weight', type=float, help='center loss weight', default=5)
 parser.add_argument('--exclusive_weight', type=float, help='exclusive loss weight', default=15)
+# model parameters
+parser.add_argument('--radius', type=float, help='normed data radius', default=10)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
@@ -88,7 +90,7 @@ test_transform = transforms.Compose([
 
 print("Loading model...")
 from models import CenterLossExclusive1
-model = CenterLossExclusive1(num_class=args.num_class, norm_data=True, radius=10)
+model = CenterLossExclusive1(num_class=args.num_class, norm_data=True, radius=args.radius)
 print("Done!")
 
 # optimizer related
