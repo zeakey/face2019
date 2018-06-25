@@ -100,9 +100,6 @@ def train_epoch(train_loader, model, optimizer, epoch):
   top1 = AverageMeter()
   batch_time = AverageMeter()
   train_record = np.zeros((len(train_loader), 2), np.float32) # loss top1acc
-  # exclusive loss weight
-  #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = 10
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
@@ -152,10 +149,10 @@ def main():
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"train_record": train_record,
                   "lfw_acc_history": lfw_acc_history}))
-    plt.plot(train_record[:, 0]) # loss
+    plt.plot(train_record[:, 0] / 10) # loss / 10
     plt.plot(train_record[:, 1]) # top1acc
     plt.plot(np.arange(0, train_record.shape[0], train_record.shape[0] / args.maxepoch), lfw_acc_history)
-    plt.legend(['loss', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
+    plt.legend(['loss / 10', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
   else:
     savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
             dict({"lfw_acc_history": lfw_acc_history}))
