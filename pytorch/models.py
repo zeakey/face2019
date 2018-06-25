@@ -10,9 +10,10 @@ from ops import AngleLinear, ExclusiveLinear, NormedLinear, CenterlossExclusiveL
 # the base architecture
 #==================================================================#
 class Resnet20(nn.Module):
-    def __init__(self, dim=512):
+    def __init__(self, dim=512, bn=False):
         super(Resnet20, self).__init__()
         self.dim = dim
+        self.bn = bn
         #input = B*3*112*96
         self.conv1_1 = nn.Conv2d(3,64,3,2,1) #=>B*64*56*48
         self.relu1_1 = nn.PReLU(64)
@@ -65,22 +66,61 @@ class Resnet20(nn.Module):
 
         self.fc5 = nn.Linear(512*7*6, self.dim)
 
+        if self.bn:
+          self.bn1_1 = nn.BatchNorm2d(64)
+          self.bn1_2 = nn.BatchNorm2d(64)
+          self.bn1_3 = nn.BatchNorm2d(64)
+          self.bn2_1 = nn.BatchNorm2d(128)
+          self.bn2_2 = nn.BatchNorm2d(128)
+          self.bn2_3 = nn.BatchNorm2d(128)
+          self.bn2_4 = nn.BatchNorm2d(128)
+          self.bn2_5 = nn.BatchNorm2d(128)
+          self.bn3_1 = nn.BatchNorm2d(256)
+          self.bn3_2 = nn.BatchNorm2d(256)
+          self.bn3_3 = nn.BatchNorm2d(256)
+          self.bn3_4 = nn.BatchNorm2d(256)
+          self.bn3_5 = nn.BatchNorm2d(256)
+          self.bn3_6 = nn.BatchNorm2d(256)
+          self.bn3_7 = nn.BatchNorm2d(256)
+          self.bn3_8 = nn.BatchNorm2d(256)
+          self.bn3_9 = nn.BatchNorm2d(256)
+          self.bn4_1 = nn.BatchNorm2d(512)
+          self.bn4_2 = nn.BatchNorm2d(512)
+          self.bn4_3 = nn.BatchNorm2d(512)
+
     def forward(self, x):
-        x = self.relu1_1(self.conv1_1(x))
-        x = x + self.relu1_3(self.conv1_3(self.relu1_2(self.conv1_2(x))))
+        if self.bn:
+            x = self.relu1_1(self.bn1_1(self.conv1_1(x)))
+            x = x + self.relu1_3(self.bn1_3(self.conv1_3(self.relu1_2(self.bn1_2(self.conv1_2(x))))))
 
-        x = self.relu2_1(self.conv2_1(x))
-        x = x + self.relu2_3(self.conv2_3(self.relu2_2(self.conv2_2(x))))
-        x = x + self.relu2_5(self.conv2_5(self.relu2_4(self.conv2_4(x))))
+            x = self.relu2_1(self.bn2_1(self.conv2_1(x)))
+            x = x + self.relu2_3(self.bn2_3(self.conv2_3(self.relu2_2(self.bn2_2(self.conv2_2(x))))))
+            x = x + self.relu2_5(self.bn2_5(self.conv2_5(self.relu2_4(self.bn2_4(self.conv2_4(x))))))
 
-        x = self.relu3_1(self.conv3_1(x))
-        x = x + self.relu3_3(self.conv3_3(self.relu3_2(self.conv3_2(x))))
-        x = x + self.relu3_5(self.conv3_5(self.relu3_4(self.conv3_4(x))))
-        x = x + self.relu3_7(self.conv3_7(self.relu3_6(self.conv3_6(x))))
-        x = x + self.relu3_9(self.conv3_9(self.relu3_8(self.conv3_8(x))))
+            x = self.relu3_1(self.bn3_1(self.conv3_1(x)))
+            x = x + self.relu3_3(self.bn3_3(self.conv3_3(self.relu3_2(self.bn3_2(self.conv3_2(x))))))
+            x = x + self.relu3_5(self.bn3_5(self.conv3_5(self.relu3_4(self.bn3_4(self.conv3_4(x))))))
+            x = x + self.relu3_7(self.bn3_7(self.conv3_7(self.relu3_6(self.bn3_6(self.conv3_6(x))))))
+            x = x + self.relu3_9(self.bn3_9(self.conv3_9(self.relu3_8(self.bn3_8(self.conv3_8(x))))))
 
-        x = self.relu4_1(self.conv4_1(x))
-        x = x + self.relu4_3(self.conv4_3(self.relu4_2(self.conv4_2(x))))
+            x = self.relu4_1(self.bn4_1(self.conv4_1(x)))
+            x = x + self.relu4_3(self.bn4_3(self.conv4_3(self.relu4_2(self.bn4_2(self.conv4_2(x))))))
+        else:
+            x = self.relu1_1(self.conv1_1(x))
+            x = x + self.relu1_3(self.conv1_3(self.relu1_2(self.conv1_2(x))))
+
+            x = self.relu2_1(self.conv2_1(x))
+            x = x + self.relu2_3(self.conv2_3(self.relu2_2(self.conv2_2(x))))
+            x = x + self.relu2_5(self.conv2_5(self.relu2_4(self.conv2_4(x))))
+
+            x = self.relu3_1(self.conv3_1(x))
+            x = x + self.relu3_3(self.conv3_3(self.relu3_2(self.conv3_2(x))))
+            x = x + self.relu3_5(self.conv3_5(self.relu3_4(self.conv3_4(x))))
+            x = x + self.relu3_7(self.conv3_7(self.relu3_6(self.conv3_6(x))))
+            x = x + self.relu3_9(self.conv3_9(self.relu3_8(self.conv3_8(x))))
+
+            x = self.relu4_1(self.conv4_1(x))
+            x = x + self.relu4_3(self.conv4_3(self.relu4_2(self.conv4_2(x))))
 
         x = x.view(x.size(0),-1)
         x = self.fc5(x)
@@ -192,10 +232,10 @@ class CenterLossExclusive(nn.Module):
 # and reuse the linear weights as centers
 #==================================================================#
 class CenterLossExclusive1(nn.Module):
-  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10, bn=False):
     super(CenterLossExclusive1, self).__init__()
     self.num_class = num_class
-    self.base = Resnet20()
+    self.base = Resnet20(bn=bn)
     self.fc6 = CenterlossExclusiveLinear(dim, num_class,
                         norm_data=norm_data, radius=radius)
   def forward(self, x, target=None):
