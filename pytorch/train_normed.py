@@ -49,6 +49,9 @@ assert isfile(args.lfwlist)
 assert isdir(args.lfw)
 assert args.cuda == 1
 args.checkpoint = join(TMP_DIR, args.checkpoint)
+# manually asign random seed
+torch.manual_seed(666)
+
 if args.train == 0:
   args.train = False
 elif args.train == 1:
