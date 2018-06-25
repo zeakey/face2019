@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 torch.backends.cudnn.bencmark = True
 import os, sys, random, datetime, time
 from os.path import isdir, isfile, isdir, join, dirname, abspath
-import argparse
+import argparse, datetime
 import numpy as np
 from PIL import Image
 from scipy.io import savemat
@@ -31,13 +31,15 @@ parser.add_argument('--maxepoch', type=int, help='max epoch', default=30)
 parser.add_argument('--stepsize', type=float, help='step size (epoch)', default=18)
 parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
+# model parameters
+parser.add_argument('--m', type=int, help='m', default=4)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
 parser.add_argument('--angle_linear', type=int, help='use angle linear or not', default=1)
 parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
-parser.add_argument('--checkpoint', type=str, help='checkpoint path', default="checkpoint")
+parser.add_argument('--checkpoint', type=str, help='checkpoint path', default="sphereface20")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
@@ -45,7 +47,8 @@ parser.add_argument('--num_class', type=int, help='num classes', default=10572)
 parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="data/lfw-112X96")
 parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
-args.checkpoint = join(TMP_DIR, args.checkpoint)
+args.checkpoint = join(TMP_DIR, args.checkpoint) + "-m=%d" % args.m + \
+                  datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # check and assertations
 assert isfile(args.lfwlist) and isdir(args.lfw)
@@ -74,7 +77,7 @@ test_transform = transforms.Compose([
 # model
 print("Loading model...")
 from models import Sphereface20
-model = Sphereface20(num_class=args.num_class).cuda()
+model = Sphereface20(num_class=args.num_class, m=args.m).cuda()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
