@@ -57,6 +57,9 @@ assert args.center_weight > 0 and args.exclusive_weight > 0
 
 args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight%.3f-exclusive_weight%.3f-radius%.3f" % \
                                      (args.center_weight, args.exclusive_weight, args.radius)
+# manually asign random seed
+torch.manual_seed(666)
+
 if args.train == 0:
   args.train = False
 elif args.train == 1:
@@ -90,7 +93,7 @@ test_transform = transforms.Compose([
 
 print("Loading model...")
 from models import CenterLossExclusive1
-model = CenterLossExclusive1(num_class=args.num_class, norm_data=True, radius=args.radius)
+model = CenterLossExclusive1(num_class=args.num_class, norm_data=True, radius=args.radius, bn=False)
 print("Done!")
 
 # optimizer related
@@ -119,8 +122,9 @@ def train_epoch(train_loader, model, optimizer, epoch):
     it = epoch * len(train_loader) + batch_idx
     #=====================================================================
     # adjust you loss weight (s) here
+    # center_weight = float(args.center_weight * (1 - np.exp(-it * 0.001)))
+    center_weight = float(args.center_weight)
     exclusive_weight = float(args.exclusive_weight)
-    center_weight = float(args.center_weight * (1 - np.exp(-it * 0.001)))
     #=====================================================================
     start_time = time.time()
     if args.cuda:
