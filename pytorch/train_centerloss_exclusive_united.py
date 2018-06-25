@@ -194,7 +194,6 @@ def main():
             dict({"lfw_acc_history": lfw_acc_history}))
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
-  plt.ylim(0, 4)
   plt.grid(True)
   plt.title("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
   plt.savefig(args.checkpoint + '-record.pdf')
