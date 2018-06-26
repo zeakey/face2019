@@ -106,6 +106,7 @@ print("Done!")
 # optimizer related
 from ops import AngleCenterLoss
 criterion = nn.CrossEntropyLoss()
+criterion_nonreduce = nn.CrossEntropyLoss(reduce=False)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 if True:
@@ -153,16 +154,25 @@ def train_epoch(train_loader, model, optimizer, epoch):
     if args.topk > 0:
       feature = feature.detach() # only used to select samples
       feature_l2 = torch.squeeze(torch.norm(feature, p=2, dim=1))
+      # select topk
       _, topk_shortest = torch.topk(feature_l2, k=args.topk, dim=0, largest=False)
       _, topk_longest = torch.topk(feature_l2,  k=args.topk, dim=0, largest=True)
       indices = torch.ones(feature.size(0))
       indices[topk_shortest] = 0
       indices = indices.byte()
-      feature = feature[indices]
-      label = label[indices]
-      prob = prob[indices]
-
-    cls_loss = criterion(prob, label)
+      # normalize feature_l2 into [0, 1]
+      feature_l2 -= feature_l2.min()
+      feature_l2 /= feature_l2.max()
+      # weight = e^(\alpha * (feature_l2 - 1))
+      alpha = 1
+      feature_l2 = torch.exp(alpha * (feature_l2 - 1))
+      #feature = feature[indices]
+      #label = label[indices]
+      #prob = prob[indices]
+      cls_loss = criterion_nonreduce(prob, label)
+      cls_loss = torch.dot(cls_loss.view(feature.size(0)), feature_l2.view(feature.size(0))) / feature.size(0)
+    else:
+      cls_loss = criterion(prob, label)
     loss = cls_loss + exclusive_weight * exclusive_loss \
                     + center_weight * center_loss
     # measure accuracy and record loss
@@ -180,8 +190,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
     optimizer.step()
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), \
-            loss-cent=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
+      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), loss-cent=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val, \
       loss_exc.val, exclusive_weight, loss_center.val, center_weight, top1.val, scheduler.get_lr()[0]))
       # cache images with shortest/longest feature representations
@@ -232,8 +241,7 @@ def main():
     axes[3].plot(train_record[:, 3], 'r') # top1 acc
     axes[3].title("Training Accuracy")
 
-    max_acc_epoch = np.argmax(lfw_acc_history)
-    axes[4].plot(max_acc_epoch, lfw_acc_history[max_acc_epoch], 'r*', markersize=12)
+    axes[4].plot(lfw_acc_history.argmax(), lfw_acc_history.max(), 'r*', markersize=12)
     axes[4].plot(lfw_acc_history, 'r')
     axes[4].title("LFW Accuracy")
     plt.suptitle("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
