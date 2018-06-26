@@ -163,11 +163,12 @@ class AngleLinear(nn.Module):
 #===========================================================================
 # AngleLinear with Center Exclusive
 #===========================================================================
-class ExclusiveAngleLinear(nn.Module):
+class CenterExclusiveAngleLinear(nn.Module):
     def __init__(self, in_features, out_features, m = 4, min_lambda=5, lambda_base=1000, gamma=0.12, power=-1):
-        super(AngleLinear, self).__init__()
+        super(CenterExclusiveAngleLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.num_class = out_features
         self.weight = nn.Parameter(torch.Tensor(in_features,out_features))
         # options
         self.min_lambda = min_lambda
@@ -196,7 +197,7 @@ class ExclusiveAngleLinear(nn.Module):
                       self.lambda_base / (1 + self.gamma * self.iter)**-self.power)
 
       x = input   # size=(B,F)    F is feature len
-      w = self.weight # size=(F,Classnum) F=in_features Classnum=out_features
+      w = self.weight # size=[512 x 10572]
 
       ww = w.renorm(2,1,1e-5).mul(1e5)
       xlen = x.pow(2).sum(1).pow(0.5) # size=B
@@ -224,8 +225,8 @@ class ExclusiveAngleLinear(nn.Module):
       output[index] += phi_theta[index] * (1.0 + 0) / (1 + self.lamb)
 
       # weight (center) exclusive
-      weight_norm = torch.nn.functional.normalize(self.weight, p=2, dim=1)
-      cos = torch.mm(weight_norm, weight_norm.t())
+      weight_norm = torch.nn.functional.normalize(self.weight, p=2, dim=0)
+      cos = torch.mm(weight_norm.t(), weight_norm)
       cos.clamp(-1, 1)
       cos1 = cos.detach() # used to index nearest neighbour
       cos1.scatter_(1, torch.arange(self.num_class).view(-1, 1).long().cuda(), -100) # fill diagonal with -100
