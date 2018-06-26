@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.nn import Parameter
 import math
 #from ops import AngleLinear1 as AngleLinear
-from ops import AngleLinear, ExclusiveLinear, NormedLinear, CenterlossExclusiveLinear
+from ops import AngleLinear, CenterExclusiveAngleLinear, NormedLinear, CenterlossExclusiveLinear
 #==================================================================#
 # the base architecture
 #==================================================================#
@@ -192,6 +192,23 @@ class SampleExclusive(nn.Module):
       return feature
 
 #==================================================================#
+# Sphereface20 (with margin inner-product) + center exclusive
+#==================================================================#
+class Sphere20CenterExclusive(nn.Module):
+  def __init__(self, dim=512, num_class=10572, m=4):
+    super(Sphere20CenterExclusive, self).__init__()
+    self.num_class = num_class
+    self.base = Resnet20()
+    self.fc6 = CenterExclusiveAngleLinear(dim, num_class, gamma=0.06, m=m)
+  def forward(self, x, target=None):
+    feature = self.base(x)
+    if self.training:
+      prob, exclusive_loss, lamb = self.fc6(feature, target)
+      return prob, exclusive_loss, lamb
+    else:
+      return feature
+
+#==================================================================#
 # center exclusive
 #==================================================================#
 class CenterExclusive(nn.Module):
@@ -243,6 +260,6 @@ class CenterLossExclusive1(nn.Module):
     if self.training:
       assert target is not None
       prob, exclusive_loss, centerloss = self.fc6(feature, target)
-      return prob, exclusive_loss, centerloss
+      return prob, feature, exclusive_loss, centerloss
     else:
       return feature
