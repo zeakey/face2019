@@ -108,7 +108,10 @@ from ops import AngleCenterLoss
 criterion = nn.CrossEntropyLoss()
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
-scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
+if True:
+  scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
+else:
+  scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0.005)
 
 if args.resume is not None:
   print("=> loading checkpoint '{}'".format(args.resume))
@@ -177,9 +180,10 @@ def train_epoch(train_loader, model, optimizer, epoch):
     optimizer.step()
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), loss-cent=%.5f (* %.4f), acc1=%.3f" % \
+      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), \
+            loss-cent=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val, \
-      loss_exc.val, exclusive_weight, loss_center.val, center_weight, top1.val))
+      loss_exc.val, exclusive_weight, loss_center.val, center_weight, top1.val, scheduler.get_lr()[0]))
       # cache images with shortest/longest feature representations
       if args.topk > 0:
         vutils.save_image(data[topk_shortest], join(args.checkpoint, "iter%d-shortest.jpg" % it), normalize=True, padding=0)
