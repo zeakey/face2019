@@ -9,7 +9,7 @@ from torch.optim import lr_scheduler
 torch.backends.cudnn.bencmark = True
 import os, sys, random, datetime, time
 from os.path import isdir, isfile, isdir, join, dirname, abspath
-import argparse
+import argparse, datetime
 import numpy as np
 from PIL import Image
 from scipy.io import savemat
@@ -56,7 +56,8 @@ assert args.cuda == 1
 assert args.center_weight > 0 and args.exclusive_weight > 0
 
 args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight%.3f-exclusive_weight%.3f-radius%.3f" % \
-                                     (args.center_weight, args.exclusive_weight, args.radius)
+                                     (args.center_weight, args.exclusive_weight, args.radius) + \
+                                     datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # manually asign random seed
 torch.manual_seed(666)
 
