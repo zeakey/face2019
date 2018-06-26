@@ -15,6 +15,7 @@ from PIL import Image
 from scipy.io import savemat
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 from utils import accuracy, test_lfw, AverageMeter, save_checkpoint
 
@@ -36,13 +37,14 @@ parser.add_argument('--center_weight', type=float, help='center loss weight', de
 parser.add_argument('--exclusive_weight', type=float, help='exclusive loss weight', default=15)
 # model parameters
 parser.add_argument('--radius', type=float, help='normed data radius', default=10)
+parser.add_argument('--topk', type=int, help='remove samples with topk shortest feature representations', default=-1)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
 parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
 parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="centerloss-center-exclusive_united")
-parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
+parser.add_argument('--resume', type=str, help='resume checkpoint path', default=None)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
 parser.add_argument('--num_class', type=int, help='num classes', default=10572)
@@ -58,6 +60,9 @@ assert args.center_weight > 0 and args.exclusive_weight > 0
 args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight%.2f-exclusive_weight%.2f-radius%.1f-" % \
                                      (args.center_weight, args.exclusive_weight, args.radius) + \
                                      datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+if not isdir(args.checkpoint):
+  os.makedirs(args.checkpoint)
+
 print("Checkpoint prefix: " + split(args.checkpoint)[-1])
 # manually asign random seed
 torch.manual_seed(666)
@@ -105,6 +110,14 @@ criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
 
+if args.resume is not None:
+  print("=> loading checkpoint '{}'".format(args.resume))
+  assert isfile(args.resume)
+  checkpoint = torch.load(args.resume)
+  model.load_state_dict(checkpoint['state_dict'])
+  # optimizer.load_state_dict(checkpoint['optimizer'])
+  print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
+
 if args.cuda:
   print("Transporting model to GPU(s)...")
   model.cuda()
@@ -132,7 +145,20 @@ def train_epoch(train_loader, model, optimizer, epoch):
     if args.cuda:
       data = data.cuda()
       label = label.cuda(non_blocking=True)
-    prob, exclusive_loss, center_loss = model(data, label)
+    prob, feature, exclusive_loss, center_loss = model(data, label)
+    # filt out the shortest sample
+    if args.topk > 0:
+      feature = feature.detach() # only used to select samples
+      feature_l2 = torch.squeeze(torch.norm(feature, p=2, dim=1))
+      _, topk_shortest = torch.topk(feature_l2, k=args.topk, dim=0, largest=False)
+      _, topk_longest = torch.topk(feature_l2,  k=args.topk, dim=0, largest=True)
+      indices = torch.ones(feature.size(0))
+      indices[topk_shortest] = 0
+      indices = indices.byte()
+      feature = feature[indices]
+      label = label[indices]
+      prob = prob[indices]
+
     cls_loss = criterion(prob, label)
     loss = cls_loss + exclusive_weight * exclusive_loss \
                     + center_weight * center_loss
@@ -154,6 +180,10 @@ def train_epoch(train_loader, model, optimizer, epoch):
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), loss-cent=%.5f (* %.4f), acc1=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val, \
       loss_exc.val, exclusive_weight, loss_center.val, center_weight, top1.val))
+      # cache images with shortest/longest feature representations
+      if args.topk > 0:
+        vutils.save_image(data[topk_shortest], join(args.checkpoint, "iter%d-shortest.jpg" % it), normalize=True, padding=0)
+        vutils.save_image(data[topk_longest], join(args.checkpoint, "iter%d-longest.jpg" % it), normalize=True, padding=0)
     train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, loss_center.avg, top1.avg / float(100)])
   return train_record
 
@@ -170,35 +200,46 @@ def main():
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'optimizer' : optimizer.state_dict(),
-      }, filename=args.checkpoint + "-epoch%d.pth" % epoch)
+      }, filename=join(args.checkpoint, "epoch%d.pth" % epoch))
     # prepare data for testing
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, args.checkpoint+'-epoch%d' % epoch)
+    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
     print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
   if args.train:
-    savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
+    savemat(join(args.checkpoint, 'record(max-acc=%.5f).mat' % lfw_acc_history.max()),
             dict({"train_record": train_record,
                   "lfw_acc_history": lfw_acc_history}))
     iter_per_epoch = train_record.shape[0] / args.maxepoch # iterations per epoch
-    plt.plot(train_record[:, 0] / 10, 'r') # loss cls / 10
-    plt.plot(train_record[:, 1], 'g') # loss exclusive
-    plt.plot(train_record[:, 1], 'b') # loss center
-    plt.plot(train_record[:, 3], 'c') # top1 acc
-    plt.plot(np.arange(0, train_record.shape[0], iter_per_epoch), lfw_acc_history, 'm')
-    max_acc_epoch = np.argmax(lfw_acc_history)
-    plt.plot(max_acc_epoch * iter_per_epoch, lfw_acc_history[max_acc_epoch], 'm*', markersize=12)
+    fig, axes = plt.subplots(1, 5)
+    for ax in axes:
+      ax.grid(True)
+      ax.hold(True)
+    axes[0].plot(train_record[:, 0], 'r') # loss cls
+    axes[0].title("Cross-Entropy Loss")
 
-    plt.legend(['cross entropy loss (*0.1)', 'exclusive loss', 'center loss', 'Training-Acc', 'LFW-Acc (max=%.5f)' % lfw_acc_history.max()])
+    axes[1].plot(train_record[:, 1], 'r') # loss exclusive
+    axes[1].title("Exclusive Loss")
+
+    axes[2].plt.plot(train_record[:, 1], 'r') # loss center
+    axes[2].title("Center Loss")
+
+    axes[3].plot(train_record[:, 3], 'r') # top1 acc
+    axes[3].title("Training Accuracy")
+
+    max_acc_epoch = np.argmax(lfw_acc_history)
+    axes[4].plot(max_acc_epoch, lfw_acc_history[max_acc_epoch], 'r*', markersize=12)
+    axes[4].plot(lfw_acc_history, 'r')
+    axes[4].title("LFW Accuracy")
+    plt.suptitle("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
   else:
-    savemat(args.checkpoint + '-record(max-acc=%.5f).mat' % lfw_acc_history.max(),
+    savemat(join(args.checkpoint, 'record(max-acc=%.5f).mat' % lfw_acc_history.max()),
             dict({"lfw_acc_history": lfw_acc_history}))
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
-  plt.grid(True)
-  plt.title("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
-  plt.savefig(args.checkpoint + '-record.pdf')
+    plt.title("center-loss $\\times$ %.3f + exclusive-loss $\\times$ %.3f" % (args.center_weight, args.exclusive_weight))
+  plt.savefig(join(args.checkpoint, '-record.pdf'))
 
 if __name__ == '__main__':
   main()
