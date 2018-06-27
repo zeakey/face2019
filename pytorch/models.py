@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.nn import Parameter
 import math
 #from ops import AngleLinear1 as AngleLinear
-from ops import AngleLinear, CenterExclusiveAngleLinear, NormedLinear, CenterlossExclusiveLinear
+from ops import AngleLinear, CenterExclusiveAngleLinear, NormedLinear, CenterlossExclusiveLinear, ExclusiveLinear
 #==================================================================#
 # the base architecture
 #==================================================================#
@@ -221,7 +221,7 @@ class CenterExclusive(nn.Module):
     feature = self.base(x)
     if self.training:
       prob, exclusive_loss = self.fc6(feature)
-      return prob, exclusive_loss
+      return prob, feature, exclusive_loss
     else:
       return feature
 
