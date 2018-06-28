@@ -64,7 +64,7 @@ def save_checkpoint(state, filename):
     torch.save(state, filename)
 
 def str2bool(x):
-  x = x.lower()
+  x = str(x).lower()
   if x == "1" or x == "true" or x == "yes" or x == "y":
     return True
   elif x == "0" or x == "false" or x == "no" or x == "n":
