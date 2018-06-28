@@ -161,11 +161,12 @@ class Normed(nn.Module):
 # sphereface20 with angular margin inner-product (AngleLinear) layer
 #==================================================================#
 class Sphereface20(nn.Module):
-  def __init__(self, dim=512, num_class=10572):
+  def __init__(self, dim=512, num_class=10572, m=4):
     super(Sphereface20, self).__init__()
     self.num_class = num_class
+    self.m = m
     self.base = Resnet20()
-    self.fc6 = AngleLinear(dim, num_class, gamma=0.06)
+    self.fc6 = AngleLinear(dim, num_class, gamma=0.06, m=self.m)
   def forward(self, x, target=None):
     x = self.base(x)
     if self.training:
