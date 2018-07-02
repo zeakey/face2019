@@ -95,10 +95,17 @@ print("Done!")
 
 # optimizer related
 criterion = nn.CrossEntropyLoss()
+if True:
+  optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
+else:
+  # per-parameter options, see documentation  https://pytorch.org/docs/stable/optim.html#per-parameter-options
+  # asign larger weight_decay and smaller lr to centers
+  optimizer = torch.optim.SGD([{'params': model.base.parameters()},
+                             {'params': model.fc6.parameters(), 'lr': args.lr, 'weight_decay': args.wd*5}
+                            ], lr=args.lr, momentum=args.momentum, weight_decay=args.wd)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
-scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
-# scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[16, 24, 28], gamma=args.gamma)
+# scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
+scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[16, 24, 28], gamma=args.gamma)
 
 if args.cuda:
   print("Transporting model to GPU(s)...")
@@ -189,17 +196,13 @@ def main():
     axes[4].plot(lfw_acc_history.argmax(), lfw_acc_history.max(), 'r*', markersize=12)
     axes[4].plot(lfw_acc_history, 'r')
     axes[4].set_title("LFW-Acc")
-
-    plt.suptitle("radius=%.1f, exclusive-loss $\\times$ %.1f max LFW-Acc=%.3f" % (args.radius, args.exclusive_weight,
-    lfw_acc_history.max()))
   else:
     savemat(join(args.checkpoint + 'record(max-acc=%.5f).mat' % lfw_acc_history.max()),
             dict({"lfw_acc_history": lfw_acc_history}))
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
   plt.grid(True)
-  plt.title("center-exclusive$\\times$%.1f" % args.exclusive_weight)
-  plt.savefig(join(args.checkpoint, '-record.pdf'))
+  plt.savefig(join(args.checkpoint, 'radius%.1f-exweight%.1f.pdf' % (args.radius, args.exclusive_weight)))
 
 if __name__ == '__main__':
   main()
