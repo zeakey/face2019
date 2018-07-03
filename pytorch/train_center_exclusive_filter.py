@@ -140,7 +140,8 @@ def train_epoch(train_loader, model, optimizer, epoch):
       weight[hard_examples] /= weight[hard_examples].max()
       weight[hard_examples] = 1 / weight[hard_examples]
     else:
-      decay_examples = feature_l2 < np.sort(feature_l2)[48]
+      num_decay = int(feature_l2.size / 10)
+      decay_examples = feature_l2 < np.sort(feature_l2)[num_decay]
       normal_examples = np.logical_not(decay_examples)
       weight = feature_l2.copy()
       weight[normal_examples] = 1
