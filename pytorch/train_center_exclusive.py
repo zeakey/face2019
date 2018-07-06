@@ -18,6 +18,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 from utils import accuracy, test_lfw, AverageMeter, save_checkpoint, str2bool
+from utils import CosineAnnelingLR
 
 THIS_DIR = abspath(dirname(__file__))
 TMP_DIR = join(THIS_DIR, 'tmp')
@@ -34,7 +35,7 @@ parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 parser.add_argument('--maxepoch', type=int, help='maximal training epoch', default=30)
 # model parameters
-parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=10)
+parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=6)
 parser.add_argument('--radius', type=float, help='radius', default=15)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
@@ -106,6 +107,7 @@ else:
 
 # scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
 scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[16, 24, 28], gamma=args.gamma)
+# scheduler = CosineAnnelingLR(optimizer, min_lr=0.01, max_lr=0.1, cycle_length=10)
 
 if args.cuda:
   print("Transporting model to GPU(s)...")
@@ -147,7 +149,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
     optimizer.step()
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
+      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val,
       loss_exc.val, exclusive_weight, top1.val, scheduler.get_lr()[0]))
     train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, top1.avg / float(100), scheduler.get_lr()[0]])
