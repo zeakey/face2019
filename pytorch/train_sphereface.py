@@ -47,8 +47,10 @@ parser.add_argument('--num_class', type=int, help='num classes', default=10572)
 parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="data/lfw-112X96")
 parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
-args.checkpoint = join(TMP_DIR, args.checkpoint) + "-m=%d" % args.m + \
-                  datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+args.checkpoint = join(TMP_DIR, args.checkpoint) + "-m=%d-" % args.m + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+print("Checkpoint directory: %s" % args.checkpoint)
+if not isdir(args.checkpoint):
+  os.makedirs(args.checkpoint)
 
 # check and assertations
 assert isfile(args.lfwlist) and isdir(args.lfw)
@@ -121,12 +123,12 @@ def main():
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'optimizer' : optimizer.state_dict(),
-      }, filename=args.checkpoint + "-epoch%d" % (epoch) + ".pth")
+      }, filename=join(args.checkpoint, "epoch%d" % (epoch) + ".pth"))
     # prepare data for testing
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, args.checkpoint+'-epoch%d' % epoch)
+    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
     print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
 
 if __name__ == '__main__':
