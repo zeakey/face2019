@@ -34,7 +34,7 @@ parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 parser.add_argument('--maxepoch', type=int, help='maximal training epoch', default=30)
 # model parameters
-parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=10)
+parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=6)
 parser.add_argument('--radius', type=float, help='radius', default=15)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
@@ -43,6 +43,7 @@ parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
 parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="center_exclusive_filter")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
+parser.add_argument('--parallel', action='store_true')
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
 parser.add_argument('--num_class', type=int, help='num classes', default=10572)
@@ -77,7 +78,7 @@ if args.train:
   )
   train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.bs, shuffle=True,
-    num_workers=12, pin_memory=True
+    num_workers=24, pin_memory=True
   )
   print("Done!")
 
@@ -104,6 +105,8 @@ if args.cuda:
   print("Transporting model to GPU(s)...")
   model.cuda()
   print("Done!")
+if args.parallel:
+  model = nn.DataParallel(model)
 
 def train_epoch(train_loader, model, optimizer, epoch):
   # recording
@@ -114,7 +117,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
   train_record = np.zeros((len(train_loader), 4), np.float32) # loss, exc_loss, top1-acc, lr
   # exclusive loss weight
   #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = args.exclusive_weight * (epoch >= 4)
+  exclusive_weight = args.exclusive_weight * (epoch >= 1)
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
@@ -124,6 +127,8 @@ def train_epoch(train_loader, model, optimizer, epoch):
       data = data.cuda()
       label = label.cuda(non_blocking=True)
     prob, feature, center_exclusive_loss = model(data)
+    if args.parallel:
+      center_exclusive_loss = torch.mean(center_exclusive_loss)
     ##########################################
     bs = feature.size(0)
     feature_l2 = torch.norm(feature, p=2, dim=1).detach()
@@ -185,16 +190,16 @@ def main():
         train_record = train_epoch(train_loader, model, optimizer, epoch)
       else:
         train_record = np.vstack((train_record, train_epoch(train_loader, model, optimizer, epoch)))
-      save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'optimizer' : optimizer.state_dict(),
-      }, filename=join(args.checkpoint, "epoch%d.pth" % epoch))
     # prepare data for testing
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
     lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
+    save_checkpoint({
+      'epoch': epoch + 1,
+      'state_dict': model.state_dict(),
+      'optimizer' : optimizer.state_dict(),
+    }, filename=join(args.checkpoint, "epoch%d-lfw%f.pth" % (epoch, lfw_acc_history[epoch])))
     print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
   if args.train:
     savemat(join(args.checkpoint, 'record(max-acc=%.5f).mat' % lfw_acc_history.max()),
