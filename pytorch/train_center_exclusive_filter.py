@@ -36,6 +36,7 @@ parser.add_argument('--maxepoch', type=int, help='maximal training epoch', defau
 # model parameters
 parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=6)
 parser.add_argument('--radius', type=float, help='radius', default=15)
+parser.add_argument('--l2filter', type=str, help='filter samples based on l2', default="True")
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=str, help='set to false to test lfw acc only', default="true")
@@ -56,6 +57,7 @@ assert args.exclusive_weight > 0
 assert args.cuda == 1
 
 args.train = str2bool(args.train)
+args.l2filter = str2bool(args.l2filter)
 args.checkpoint = join(TMP_DIR, args.checkpoint) + "-exclusive_weight%.2f-radius%.1f-" % \
                                      (args.exclusive_weight, args.radius) + \
                                      datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
@@ -95,7 +97,7 @@ model = CenterExclusive(num_class=args.num_class, norm_data=True, radius=args.ra
 print("Done!")
 
 # optimizer related
-criterion = nn.CrossEntropyLoss(reduce=False)
+criterion = nn.CrossEntropyLoss(reduce = not args.l2filter)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
@@ -134,31 +136,34 @@ def train_epoch(train_loader, model, optimizer, epoch):
     if args.parallel:
       center_exclusive_loss = torch.mean(center_exclusive_loss)
     ##########################################
-    bs = feature.size(0)
-    feature_l2 = torch.norm(feature, p=2, dim=1).detach()
-    feature_l2 = feature_l2.cpu().numpy()
-    assert feature_l2.min() > 0
-    if False:
-      bad, hard = int(bs / 20), int(bs / 2)
-      bad_examples = (feature_l2 <= np.sort(feature_l2)[bad]) # bad examples will be eliminated
-      hard_examples = np.logical_and(feature_l2 > np.sort(feature_l2)[bad], feature_l2 < np.sort(feature_l2)[hard]) # hard examples will be emphasized
-      normal_examples = np.logical_not(np.logical_or(bad_examples, hard_examples))
-      weight = feature_l2.copy()
-      weight[normal_examples] = 1
-      weight[bad_examples] = 0
-      weight[hard_examples] /= weight[hard_examples].max()
-      weight[hard_examples] = 1 / weight[hard_examples]
+    if args.l2filter:
+      bs = feature.size(0)
+      feature_l2 = torch.norm(feature, p=2, dim=1).detach()
+      feature_l2 = feature_l2.cpu().numpy()
+      assert feature_l2.min() > 0
+      if False:
+        bad, hard = int(bs / 20), int(bs / 2)
+        bad_examples = (feature_l2 <= np.sort(feature_l2)[bad]) # bad examples will be eliminated
+        hard_examples = np.logical_and(feature_l2 > np.sort(feature_l2)[bad], feature_l2 < np.sort(feature_l2)[hard]) # hard examples will be emphasized
+        normal_examples = np.logical_not(np.logical_or(bad_examples, hard_examples))
+        weight = feature_l2.copy()
+        weight[normal_examples] = 1
+        weight[bad_examples] = 0
+        weight[hard_examples] /= weight[hard_examples].max()
+        weight[hard_examples] = 1 / weight[hard_examples]
+      else:
+        num_decay = int(feature_l2.size / 15)
+        decay_examples = feature_l2 < np.sort(feature_l2)[num_decay]
+        normal_examples = np.logical_not(decay_examples)
+        weight = feature_l2.copy()
+        weight[normal_examples] = 1
+        weight[decay_examples] -= weight[decay_examples].min()
+        weight[decay_examples] /= weight[decay_examples].max()
+        # weight[decay_examples] = 1 / weight[decay_examples]
+      loss = criterion(prob, label)
+      loss = torch.mul(loss, torch.from_numpy(weight).cuda()).mean()
     else:
-      num_decay = int(feature_l2.size / 15)
-      decay_examples = feature_l2 < np.sort(feature_l2)[num_decay]
-      normal_examples = np.logical_not(decay_examples)
-      weight = feature_l2.copy()
-      weight[normal_examples] = 1
-      weight[decay_examples] -= weight[decay_examples].min()
-      weight[decay_examples] /= weight[decay_examples].max()
-      # weight[decay_examples] = 1 / weight[decay_examples]
-    loss = criterion(prob, label)
-    loss = torch.mul(loss, torch.from_numpy(weight).cuda()).mean()
+      loss = criterion(prob, label)
     ##########################################
     # measure accuracy and record loss
     prec1, prec5 = accuracy(prob, label, topk=(1, 5))
@@ -178,10 +183,11 @@ def train_epoch(train_loader, model, optimizer, epoch):
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val,
       loss_exc.val, exclusive_weight, top1.val, scheduler.get_lr()[0]))
-      plt.scatter(feature_l2, weight)
-      plt.title("%dhard-%dbad" % (np.count_nonzero(np.logical_and(weight != 1, weight != 0)), np.count_nonzero(weight==0)))
-      plt.savefig(join(args.checkpoint, "Iter%d-feature-l2-vs-weight.jpg" % it))
-      plt.close()
+      if args.l2filter:
+        plt.scatter(feature_l2, weight)
+        plt.title("%dhard-%dbad" % (np.count_nonzero(np.logical_and(weight != 1, weight != 0)), np.count_nonzero(weight==0)))
+        plt.savefig(join(args.checkpoint, "Iter%d-feature-l2-vs-weight.jpg" % it))
+        plt.close()
     train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, top1.avg / float(100), scheduler.get_lr()[0]])
   return train_record
 
