@@ -115,13 +115,17 @@ def train_epoch(train_loader, model, optimizer, epoch):
   top1 = AverageMeter()
   batch_time = AverageMeter()
   train_record = np.zeros((len(train_loader), 4), np.float32) # loss, exc_loss, top1-acc, lr
-  # exclusive loss weight
-  #exclusive_weight = float(epoch + 1) ** 2 / float(1000)
-  exclusive_weight = args.exclusive_weight * (epoch >= 1)
   # switch to train mode
   model.train()
   for batch_idx, (data, label) in enumerate(train_loader):
     it = epoch * len(train_loader) + batch_idx
+    # exclusive loss weight
+    warmup = 1
+    if epoch < warmup:
+      # exclusive_weight = float(it) / (warmup * len(train_loader)) * args.exclusive_weight
+      exclusive_weight = 0
+    else:
+      exclusive_weight = args.exclusive_weight
     start_time = time.time()
     if args.cuda:
       data = data.cuda()
@@ -145,7 +149,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
       weight[hard_examples] /= weight[hard_examples].max()
       weight[hard_examples] = 1 / weight[hard_examples]
     else:
-      num_decay = int(feature_l2.size / 10)
+      num_decay = int(feature_l2.size / 15)
       decay_examples = feature_l2 < np.sort(feature_l2)[num_decay]
       normal_examples = np.logical_not(decay_examples)
       weight = feature_l2.copy()
