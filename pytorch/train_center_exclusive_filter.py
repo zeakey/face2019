@@ -122,10 +122,10 @@ def train_epoch(train_loader, model, optimizer, epoch):
   for batch_idx, (data, label) in enumerate(train_loader):
     it = epoch * len(train_loader) + batch_idx
     # exclusive loss weight
-    warmup = 1
+    warmup = 6
     if epoch < warmup:
-      # exclusive_weight = float(it) / (warmup * len(train_loader)) * args.exclusive_weight
-      exclusive_weight = 0
+      exclusive_weight = float(it) / (warmup * len(train_loader)) * args.exclusive_weight
+      # exclusive_weight = 0
     else:
       exclusive_weight = args.exclusive_weight
     start_time = time.time()
@@ -144,7 +144,8 @@ def train_epoch(train_loader, model, optimizer, epoch):
       if False:
         bad, hard = int(bs / 20), int(bs / 2)
         bad_examples = (feature_l2 <= np.sort(feature_l2)[bad]) # bad examples will be eliminated
-        hard_examples = np.logical_and(feature_l2 > np.sort(feature_l2)[bad], feature_l2 < np.sort(feature_l2)[hard]) # hard examples will be emphasized
+        # hard examples will be emphasized
+        hard_examples = np.logical_and(feature_l2 > np.sort(feature_l2)[bad], feature_l2 < np.sort(feature_l2)[hard])
         normal_examples = np.logical_not(np.logical_or(bad_examples, hard_examples))
         weight = feature_l2.copy()
         weight[normal_examples] = 1
