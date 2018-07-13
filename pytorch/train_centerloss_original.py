@@ -313,7 +313,7 @@ def main():
     plt.plot(lfw_acc_history)
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
   plt.grid(True)
-  plt.title("center-loss$\\times$%.1f" % args.center_loss)
+  plt.title("center-loss$\\times$%.1f" % args.center_weight)
   plt.savefig(join(args.checkpoint, 'record.pdf'))
 
 if __name__ == '__main__':
