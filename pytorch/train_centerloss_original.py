@@ -82,7 +82,7 @@ if args.train:
   )
   train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.bs, shuffle=True,
-    num_workers=24, pin_memory=True
+    num_workers=8, pin_memory=True
   )
   print("Done!")
 
