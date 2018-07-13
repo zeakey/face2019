@@ -40,7 +40,7 @@ parser.add_argument('--maxepoch', type=int, help='maximal training epoch', defau
 # model parameters
 parser.add_argument('--radius', type=float, help='radius', default=15)
 parser.add_argument('--l2filter', type=str, help='filter samples based on l2', default="True")
-parser.add_argument('--center_weight', type=str, help='center loss weight', default=0.1)
+parser.add_argument('--center_weight', type=float, help='center loss weight', default=0.1)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=str, help='set to false to test lfw acc only', default="true")
@@ -120,12 +120,14 @@ class CenterLoss(nn.Module):
     return center_loss
 
 from models import Resnet20
+from ops import NormedLinear
+
 class Model(nn.Module):
-  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
+  def __init__(self, dim=512, num_class=10572, norm_data=True, radius=15):
     super(Model, self).__init__()
     self.num_class = num_class
     self.base = Resnet20()
-    self.fc6 = nn.Linear(dim, num_class, bias=False)
+    self.fc6 = NormedLinear(dim, num_class, radius)
   def forward(self, x):
     feature = self.base(x) # batch_size x 512
     if self.training:
@@ -149,7 +151,7 @@ center_loss.cuda()
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 # optimizer of the center loss module
 # we should use a larger weight decay, because the centers will always get far away the origin.
-optimizer_center = torch.optim.SGD(center_loss.parameters(), lr=args.lr, weight_decay=args.wd*2, momentum=args.momentum)
+optimizer_center = torch.optim.SGD(center_loss.parameters(), lr= 5 * args.lr, weight_decay=args.wd * 2, momentum=args.momentum)
 
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
 scheduler_center = lr_scheduler.StepLR(optimizer_center, step_size=args.stepsize, gamma=args.gamma)
