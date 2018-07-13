@@ -61,7 +61,7 @@ assert args.cuda == 1
 
 args.train = str2bool(args.train)
 args.l2filter = str2bool(args.l2filter)
-args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight-%.1f-radius%.1f-" % (args.center_weight, args.radius) + \
+args.checkpoint = join(TMP_DIR, args.checkpoint) + "-center_weight-%f-radius%f-" % (args.center_weight, args.radius) + \
                                      datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 print("Checkpoint directory: %s" % args.checkpoint)
 
