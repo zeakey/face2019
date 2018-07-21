@@ -17,7 +17,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
-from utils import accuracy, test_lfw, AverageMeter, save_checkpoint, str2bool
+from utils import accuracy, test_lfw, AverageMeter, save_checkpoint, str2bool, Logger
 
 THIS_DIR = abspath(dirname(__file__))
 TMP_DIR = join(THIS_DIR, 'tmp')
@@ -37,12 +37,13 @@ parser.add_argument('--maxepoch', type=int, help='maximal training epoch', defau
 parser.add_argument('--exclusive_weight', type=float, help='center exclusive loss weight', default=6)
 parser.add_argument('--radius', type=float, help='radius', default=15)
 parser.add_argument('--l2filter', type=str, help='filter samples based on l2', default="True")
+parser.add_argument('--warmup', type=int, help='warmup epoch', default=0)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=str, help='set to false to test lfw acc only', default="true")
 parser.add_argument('--cuda', type=int, help='cuda', default=1)
 parser.add_argument('--debug', type=str, help='debug mode', default='false')
-parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="center_exclusive_filter")
+parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="center_exclusive")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 parser.add_argument('--parallel', action='store_true')
 # datasets
@@ -58,9 +59,16 @@ assert args.cuda == 1
 
 args.train = str2bool(args.train)
 args.l2filter = str2bool(args.l2filter)
-args.checkpoint = join(TMP_DIR, args.checkpoint) + "-exclusive_weight%.2f-radius%.1f-" % \
-                                     (args.exclusive_weight, args.radius) + \
+
+if args.l2filter:
+    args.checkpoint = join(TMP_DIR, args.checkpoint) + "-filter-exclusive_weight%.2f-radius%.1f-warmup%d-" % \
+                                     (args.exclusive_weight, args.radius, args.warmup) + \
                                      datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+else:
+    args.checkpoint = join(TMP_DIR, args.checkpoint) + "-exclusive_weight%.2f-radius%.1f-warmup%d-" % \
+                                     (args.exclusive_weight, args.radius, args.warmup) + \
+                                     datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+
 print("Checkpoint directory: %s" % args.checkpoint)
 
 if not isdir(args.checkpoint):
@@ -80,7 +88,7 @@ if args.train:
   )
   train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.bs, shuffle=True,
-    num_workers=24, pin_memory=True
+    num_workers=8, pin_memory=True
   )
   print("Done!")
 
@@ -101,7 +109,7 @@ criterion = nn.CrossEntropyLoss(reduce = not args.l2filter)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
-# scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[16, 24, 28], gamma=args.gamma)
+# scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[20, 30, 35], gamma=0.5)
 
 if args.cuda:
   print("Transporting model to GPU(s)...")
@@ -122,9 +130,9 @@ def train_epoch(train_loader, model, optimizer, epoch):
   for batch_idx, (data, label) in enumerate(train_loader):
     it = epoch * len(train_loader) + batch_idx
     # exclusive loss weight
-    warmup = 6
-    if epoch < warmup:
-      exclusive_weight = float(it) / (warmup * len(train_loader)) * args.exclusive_weight
+    if epoch < args.warmup:
+      # exclusive_weight = float(it) / (args.warmup * len(train_loader)) * args.exclusive_weight
+      exclusive_weight = float(epoch) / args.warmup * args.exclusive_weight
       # exclusive_weight = 0
     else:
       exclusive_weight = args.exclusive_weight
@@ -194,6 +202,9 @@ def train_epoch(train_loader, model, optimizer, epoch):
 
 def main():
   lfw_acc_history = np.zeros((args.maxepoch, ), np.float32)
+  # Logging to text file
+  log = Logger(join(args.checkpoint, 'log.txt'))
+  sys.stdout = log
   for epoch in range(args.maxepoch):
     scheduler.step() # will adjust learning rate
     if args.train:
@@ -212,6 +223,9 @@ def main():
       'optimizer' : optimizer.state_dict(),
     }, filename=join(args.checkpoint, "epoch%d-lfw%f.pth" % (epoch, lfw_acc_history[epoch])))
     print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
+    # instantly flush log to text file
+    log.flush()
+  # save logging figure
   if args.train:
     savemat(join(args.checkpoint, 'record(max-acc=%.5f).mat' % lfw_acc_history.max()),
             dict({"train_record": train_record,
