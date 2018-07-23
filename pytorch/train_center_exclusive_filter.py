@@ -161,7 +161,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
         weight[hard_examples] /= weight[hard_examples].max()
         weight[hard_examples] = 1 / weight[hard_examples]
       else:
-        num_decay = int(feature_l2.size / 15)
+        num_decay = int(feature_l2.size / 10)
         decay_examples = feature_l2 < np.sort(feature_l2)[num_decay]
         normal_examples = np.logical_not(decay_examples)
         weight = feature_l2.copy()
@@ -190,14 +190,17 @@ def train_epoch(train_loader, model, optimizer, epoch):
     batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
-      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val,
-      loss_exc.val, exclusive_weight, top1.val, scheduler.get_lr()[0]))
+      # (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val,
+      # loss_exc.val, exclusive_weight, top1.val, scheduler.get_lr()[0]))
+      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss.item(),
+      center_exclusive_loss.item(), exclusive_weight, prec1.item(), scheduler.get_lr()[0]))
       if args.l2filter:
         plt.scatter(feature_l2, weight)
         plt.title("%dhard-%dbad" % (np.count_nonzero(np.logical_and(weight != 1, weight != 0)), np.count_nonzero(weight==0)))
         plt.savefig(join(args.checkpoint, "Iter%d-feature-l2-vs-weight.jpg" % it))
         plt.close()
-    train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, top1.avg / float(100), scheduler.get_lr()[0]])
+    # train_record[batch_idx, :] = np.array([loss_cls.avg, loss_exc.avg, top1.avg / float(100), scheduler.get_lr()[0]])
+    train_record[batch_idx, :] = np.array([loss.item(), center_exclusive_loss.item(), prec1.item() / float(100), scheduler.get_lr()[0]])
   return train_record
 
 def main():
