@@ -46,6 +46,7 @@ parser.add_argument('--debug', type=str, help='debug mode', default='false')
 parser.add_argument('--checkpoint', type=str, help='checkpoint prefix', default="center_exclusive")
 parser.add_argument('--resume', type=str, help='checkpoint path', default=None)
 parser.add_argument('--parallel', action='store_true')
+parser.add_argument('--test_interval', type=int, help='interval (epoch) between tests', default=1)
 # datasets
 parser.add_argument('--casia', type=str, help='root folder of CASIA-WebFace dataset', default="data/CASIA-WebFace-112X96")
 parser.add_argument('--num_class', type=int, help='num classes', default=10572)
@@ -216,13 +217,14 @@ def main():
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
+    if epoch % args.test_interval == 0:
+      lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
+      print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
     save_checkpoint({
       'epoch': epoch + 1,
       'state_dict': model.state_dict(),
       'optimizer' : optimizer.state_dict(),
     }, filename=join(args.checkpoint, "epoch%d-lfw%f.pth" % (epoch, lfw_acc_history[epoch])))
-    print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
     # instantly flush log to text file
     log.flush()
   # save logging figure
