@@ -17,7 +17,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
-from utils import accuracy, test_lfw, AverageMeter, save_checkpoint, str2bool, Logger
+from utils import accuracy, test_lfw, save_checkpoint, str2bool, Logger
 
 THIS_DIR = abspath(dirname(__file__))
 TMP_DIR = join(THIS_DIR, 'tmp')
@@ -108,6 +108,12 @@ print("Done!")
 criterion = nn.CrossEntropyLoss(reduce = not args.l2filter)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
+
+# optimizer = torch.optim.SGD([
+#   {"params": model.base.parameters()},
+#   {"params": model.fc6.parameters(), "lr": args.lr / 10},
+#   ], lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
+
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)
 # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[20, 30, 35], gamma=0.5)
 
@@ -120,10 +126,6 @@ if args.parallel:
 
 def train_epoch(train_loader, model, optimizer, epoch):
   # recording
-  loss_cls = AverageMeter()
-  loss_exc = AverageMeter()
-  top1 = AverageMeter()
-  batch_time = AverageMeter()
   train_record = np.zeros((len(train_loader), 4), np.float32) # loss, exc_loss, top1-acc, lr
   # switch to train mode
   model.train()
@@ -132,8 +134,8 @@ def train_epoch(train_loader, model, optimizer, epoch):
     # exclusive loss weight
     if epoch < args.warmup:
       # exclusive_weight = float(it) / (args.warmup * len(train_loader)) * args.exclusive_weight
-      exclusive_weight = float(epoch) / args.warmup * args.exclusive_weight
-      # exclusive_weight = 0
+      # exclusive_weight = float(epoch) / args.warmup * args.exclusive_weight
+      exclusive_weight = 0
     else:
       exclusive_weight = args.exclusive_weight
     start_time = time.time()
@@ -169,31 +171,26 @@ def train_epoch(train_loader, model, optimizer, epoch):
         weight[decay_examples] -= weight[decay_examples].min()
         weight[decay_examples] /= weight[decay_examples].max()
         # weight[decay_examples] = 1 / weight[decay_examples]
-      loss = criterion(prob, label)
-      loss = torch.mul(loss, torch.from_numpy(weight).cuda()).mean()
+      loss_entrpy = criterion(prob, label)
+      loss_entrpy = torch.mul(loss_entrpy, torch.from_numpy(weight).cuda()).mean()
     else:
-      loss = criterion(prob, label)
+      loss_entrpy = criterion(prob, label)
     ##########################################
     # measure accuracy and record loss
     prec1, prec5 = accuracy(prob, label, topk=(1, 5))
-    loss_cls.update(loss.item(), data.size(0))
-    loss_exc.update(center_exclusive_loss.item(), data.size(0))
-    top1.update(prec1[0], data.size(0))
     # collect losses
-    loss = loss + exclusive_weight * center_exclusive_loss
+    loss = loss_entrpy + exclusive_weight * center_exclusive_loss
     # clear cached gradient
     optimizer.zero_grad()
     # backward gradient
     loss.backward()
     # update parameters
     optimizer.step()
-    batch_time.update(time.time() - start_time)
     if batch_idx % args.print_freq == 0:
       print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
-      # (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss_cls.val,
-      # loss_exc.val, exclusive_weight, top1.val, scheduler.get_lr()[0]))
-      (epoch, args.maxepoch, batch_idx, len(train_loader), batch_time.val, loss.item(),
-      center_exclusive_loss.item(), exclusive_weight, prec1.item(), scheduler.get_lr()[0]))
+      (epoch, args.maxepoch, batch_idx, len(train_loader), (time.time() - start_time),
+      loss_entrpy.item(), center_exclusive_loss.item(), exclusive_weight,
+      prec1.item(), scheduler.get_lr()[0]))
       if args.l2filter:
         plt.scatter(feature_l2, weight)
         plt.title("%dhard-%dbad" % (np.count_nonzero(np.logical_and(weight != 1, weight != 0)), np.count_nonzero(weight==0)))
