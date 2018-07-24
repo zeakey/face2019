@@ -233,9 +233,9 @@ def main():
             dict({"train_record": train_record,
                   "lfw_acc_history": lfw_acc_history}))
     fig, axes = plt.subplots(1, 5, figsize=(25, 5))
-    for ax in axes:
-      ax.grid(True)
-      ax.hold(True)
+    for axid in range(4):
+      axes[axid].set_xticks(np.arange(0, train_record.shape[0], len(train_loader)))
+
     axes[0].plot(train_record[:, 0], 'r') # loss cls
     axes[0].set_title("CELoss")
 
@@ -252,6 +252,7 @@ def main():
     axes[4].plot(lfw_acc_history, 'r')
     axes[4].set_title("LFW-Acc")
 
+    plt.grid(alpha=1, linestyle='dotted', linewidth=2, color='black')
     plt.suptitle("radius=%.1f, exclusive-loss $\\times$ %.1f max LFW-Acc=%.3f" % (args.radius, args.exclusive_weight,
     lfw_acc_history.max()))
   else:
@@ -261,7 +262,7 @@ def main():
     plt.legend(['LFW-Accuracy (max=%.5f)' % lfw_acc_history.max()])
   plt.grid(True)
   plt.title("center-exclusive$\\times$%.1f" % args.exclusive_weight)
-  plt.savefig(join(args.checkpoint, 'record.pdf'))
+  plt.savefig(join(args.checkpoint, 'record(max-acc=%.5f).pdf' % lfw_acc_history.max()))
 
 if __name__ == '__main__':
   main()
