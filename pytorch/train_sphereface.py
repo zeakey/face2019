@@ -131,7 +131,7 @@ def main():
     with open(args.lfwlist, 'r') as f:
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
-    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
+    lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch), dim=args.dim)
     print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
 
 if __name__ == '__main__':

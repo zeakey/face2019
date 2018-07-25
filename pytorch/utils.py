@@ -37,9 +37,9 @@ class CosineAnnelingLR(_LRScheduler):
            (1 + math.cos(math.pi * self.iter / self.current_cycle_length)) / 2
            for base_lr in self.base_lrs]
 
-def test_lfw(model, imglist, test_transform, cache_fn):
+def test_lfw(model, imglist, test_transform, cache_fn, dim=512):
   model.eval() # switch to evaluate mode
-  features = np.zeros((len(imglist), 512 * 2), dtype=np.float32)
+  features = np.zeros((len(imglist), dim * 2), dtype=np.float32)
   with torch.no_grad():
     for idx, i in enumerate(imglist):
       assert isfile(i), "Image %s doesn't exist." % i

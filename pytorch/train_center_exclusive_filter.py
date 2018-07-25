@@ -221,7 +221,7 @@ def main():
       imglist = f.readlines()
     imglist = [join(args.lfw, i.rstrip()) for i in imglist]
     if epoch % args.test_interval == 0:
-      lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch))
+      lfw_acc_history[epoch] = test_lfw(model, imglist, test_transform, join(args.checkpoint, 'epoch%d' % epoch), dim=args.dim)
       print("Epoch %d best LFW accuracy is %.5f." % (epoch, lfw_acc_history.max()))
     save_checkpoint({
       'epoch': epoch + 1,
