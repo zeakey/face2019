@@ -33,6 +33,7 @@ parser.add_argument('--gamma', type=float, help='gamma', default=0.1)
 parser.add_argument('--wd', type=float, help='weight decay', default=5e-4)
 # model parameters
 parser.add_argument('--m', type=int, help='m', default=4)
+parser.add_argument('--dim', type=int, help='feature dimension', default=512)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=int, help='train or not', default=1)
@@ -48,6 +49,8 @@ parser.add_argument('--lfw', type=str, help='LFW dataset root folder', default="
 parser.add_argument('--lfwlist', type=str, help='lfw image list', default='data/LFW_imagelist.txt')
 args = parser.parse_args()
 args.checkpoint = join(TMP_DIR, args.checkpoint) + "-m=%d-" % args.m + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+if args.dim != 512:
+  args.checkpoint += "-dim%d" % args.dim
 print("Checkpoint directory: %s" % args.checkpoint)
 if not isdir(args.checkpoint):
   os.makedirs(args.checkpoint)
@@ -79,7 +82,7 @@ test_transform = transforms.Compose([
 # model
 print("Loading model...")
 from models import Sphereface20
-model = Sphereface20(num_class=args.num_class, m=args.m).cuda()
+model = Sphereface20(dim=args.dim, num_class=args.num_class, m=args.m).cuda()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.stepsize, gamma=args.gamma)

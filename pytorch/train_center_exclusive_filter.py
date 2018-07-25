@@ -38,6 +38,7 @@ parser.add_argument('--exclusive_weight', type=float, help='center exclusive los
 parser.add_argument('--radius', type=float, help='radius', default=15)
 parser.add_argument('--l2filter', type=str, help='filter samples based on l2', default="True")
 parser.add_argument('--warmup', type=int, help='warmup epoch', default=0)
+parser.add_argument('--dim', type=int, help='feature dimension', default=512)
 # general parameters
 parser.add_argument('--print_freq', type=int, help='print frequency', default=50)
 parser.add_argument('--train', type=str, help='set to false to test lfw acc only', default="true")
@@ -69,6 +70,8 @@ else:
     args.checkpoint = join(TMP_DIR, args.checkpoint) + "-exclusive_weight%.2f-radius%.1f-warmup%d-" % \
                                      (args.exclusive_weight, args.radius, args.warmup) + \
                                      datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+if args.dim != 512:
+    args.checkpoint += "-dim%d" % args.dim
 
 print("Checkpoint directory: %s" % args.checkpoint)
 
@@ -102,7 +105,7 @@ test_transform = transforms.Compose([
 # model and optimizer
 from models import CenterExclusive
 print("Loading model...")
-model = CenterExclusive(num_class=args.num_class, norm_data=True, radius=args.radius)
+model = CenterExclusive(dim=args.dim, num_class=args.num_class, norm_data=True, radius=args.radius)
 print("Done!")
 
 # optimizer related
@@ -135,8 +138,8 @@ def train_epoch(train_loader, model, optimizer, epoch):
     # exclusive loss weight
     if epoch < args.warmup:
       # exclusive_weight = float(it) / (args.warmup * len(train_loader)) * args.exclusive_weight
-      # exclusive_weight = float(epoch) / args.warmup * args.exclusive_weight
-      exclusive_weight = 0
+      exclusive_weight = float(epoch) / args.warmup * args.exclusive_weight
+      # exclusive_weight = 0
     else:
       exclusive_weight = args.exclusive_weight
     start_time = time.time()

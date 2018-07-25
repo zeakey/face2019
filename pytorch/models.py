@@ -363,7 +363,7 @@ class Sphereface20(nn.Module):
     super(Sphereface20, self).__init__()
     self.num_class = num_class
     self.m = m
-    self.base = Resnet20()
+    self.base = Resnet20(dim=dim)
     self.fc6 = AngleLinear(dim, num_class, gamma=0.06, m=self.m)
   def forward(self, x, target=None):
     x = self.base(x)
@@ -414,9 +414,9 @@ class CenterExclusive(nn.Module):
   def __init__(self, dim=512, num_class=10572, norm_data=True, radius=10):
     super(CenterExclusive, self).__init__()
     self.num_class = num_class
-    self.base = Resnet20()
-    # self.base = Resnet64()
-    self.fc6 = ExclusiveLinear(dim, num_class, norm_data=norm_data, radius=radius)
+    self.base = Resnet20(dim=dim)
+    # self.base = Resnet64(dim=dim)
+    self.fc6 = ExclusiveLinear(feat_dim=dim, num_class=num_class, norm_data=norm_data, radius=radius)
   def forward(self, x):
     feature = self.base(x)
     if self.training:
