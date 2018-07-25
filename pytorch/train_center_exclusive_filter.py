@@ -234,7 +234,16 @@ def main():
                   "lfw_acc_history": lfw_acc_history}))
     fig, axes = plt.subplots(1, 5, figsize=(25, 5))
     for axid in range(4):
-      axes[axid].set_xticks(np.arange(0, train_record.shape[0], len(train_loader)))
+      major_ticks = np.arange(0, train_record.shape[0]+1, 5 * len(train_loader))
+      minor_ticks = np.arange(0, train_record.shape[0]+1, len(train_loader))
+      axes[axid].set_xticks(major_ticks)
+      axes[axid].set_xticks(minor_ticks, minor=True)
+      axes[axid].grid(which='minor', alpha=0.8, color='black', linestyle='dotted')
+      axes[axid].grid(which='major', alpha=1, color='black')
+    axes[4].set_xticks(np.arange(0, lfw_acc_history.size, 5))
+    axes[4].set_xticks(np.arange(0, lfw_acc_history.size, 1), minor=True)
+    axes[4].grid(which='minor', alpha=0.6, color='black', linestyle='dotted')
+    axes[4].grid(which='major', alpha=1, color='black')
 
     axes[0].plot(train_record[:, 0], 'r') # loss cls
     axes[0].set_title("CELoss")
@@ -248,11 +257,10 @@ def main():
     axes[3].plot(train_record[:, 3], 'r') # LR
     axes[3].set_title("LR")
 
-    axes[4].plot(lfw_acc_history.argmax(), lfw_acc_history.max(), 'r*', markersize=12)
-    axes[4].plot(lfw_acc_history, 'r')
+    axes[4].plot(lfw_acc_history.argmax(), lfw_acc_history.max(), 'b*', markersize=12)
+    axes[4].plot(lfw_acc_history.flatten(), 'r')
     axes[4].set_title("LFW-Acc")
 
-    plt.grid(alpha=1, linestyle='dotted', linewidth=2, color='black')
     plt.suptitle("radius=%.1f, exclusive-loss $\\times$ %.1f max LFW-Acc=%.3f" % (args.radius, args.exclusive_weight,
     lfw_acc_history.max()))
   else:
@@ -266,4 +274,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-
