@@ -108,9 +108,17 @@ print("Loading model...")
 model = CenterExclusive(dim=args.dim, num_class=args.num_class, norm_data=True, radius=args.radius)
 print("Done!")
 
+if args.resume is not None:
+  print("=> loading checkpoint '{}'".format(args.resume))
+  assert isfile(args.resume)
+  checkpoint = torch.load(args.resume)
+  pretrained = checkpoint['state_dict']
+  pretrained["fc6.weight"] = model.state_dict()["fc6.weight"]
+  model.load_state_dict(pretrained)
+  print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
+
 # optimizer related
 criterion = nn.CrossEntropyLoss(reduce = not args.l2filter)
-
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd, momentum=args.momentum)
 
 # optimizer = torch.optim.SGD([
@@ -191,7 +199,7 @@ def train_epoch(train_loader, model, optimizer, epoch):
     # update parameters
     optimizer.step()
     if batch_idx % args.print_freq == 0:
-      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%.3f" % \
+      print("Epoch %d/%d Batch %d/%d, (sec/batch: %.2fsec): loss_cls=%.3f (* 1), loss-exc=%.5f (* %.4f), acc1=%.3f, lr=%f" % \
       (epoch, args.maxepoch, batch_idx, len(train_loader), (time.time() - start_time),
       loss_entrpy.item(), center_exclusive_loss.item(), exclusive_weight,
       prec1.item(), scheduler.get_lr()[0]))
