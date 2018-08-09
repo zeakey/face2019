@@ -90,6 +90,7 @@ if args.train:
       normalize,
     ])
   )
+  args.num_class = len(train_dataset.classes)
   train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.bs, shuffle=True,
     num_workers=8, pin_memory=True
