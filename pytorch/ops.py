@@ -50,7 +50,7 @@ class ExclusiveLinear(nn.Module):
     cos1 = cos.detach() # used to index nearest neighbour
     cos1.scatter_(1, torch.arange(self.num_class).view(-1, 1).long().cuda(), -100) # fill diagonal with -100
     _, indices = torch.max(cos1, dim=0)
-    label = torch.empty((self.num_class, self.num_class)).cuda()
+    label = torch.zeros((self.num_class, self.num_class)).cuda()
     label.scatter_(1, indices.view(-1, 1).long(), 1) # fill with 1
     exclusive_loss = torch.dot(cos.view(cos.numel()), label.view(label.numel())) / self.num_class # average
     if self.norm_data:
