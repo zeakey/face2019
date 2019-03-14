@@ -1,8 +1,9 @@
 # Code written by KAIZ
 import numpy as np
+import matplotlib
+matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from scipy.io import loadmat, savemat
-from sklearn.decomposition import PCA
 from os.path import isfile, isdir, join, split, splitext
 import datetime, argparse
 EPSILON = np.float32(1e-9)
@@ -49,9 +50,15 @@ def fold10(features, cache_fn='lfw_result.txt', silent=False):
   cache_data = np.zeros((11, 2), np.float32)
   for i in range(10):
     # indice of validation and testing pairs
-    test_pair_idx = range(i * (N / 40), (i + 1) * (N / 40)) + range(i * (N / 40) + N / 4, (i + 1) * (N / 40) + N / 4)
-    test_img_idx  = range(i * (N / 20), (i + 1) * (N / 20)) + range(i * (N / 20) + N / 2, (i + 1) * (N / 20) + N / 2)
-    val_pair_idx = [idx for idx in range(N / 2) if idx not in test_pair_idx]
+    a = np.array(range(i * (N // 40), (i + 1) * (N // 40)))
+    b = np.array(range(i * (N // 40) + N // 4, (i + 1) * (N // 40) + N // 4))
+    test_pair_idx = list(range(i * (N // 40), (i + 1) * (N // 40))) + \
+                                   list(range(i * (N // 40) + N // 4, (i + 1) * (N // 40) + N // 4))
+
+    test_img_idx  = list(range(i * (N // 20), (i + 1) * (N // 20))) + \
+                                   list(range(i * (N // 20) + N // 2, (i + 1) * (N // 20) + N // 2))
+
+    val_pair_idx = [idx for idx in range(N // 2) if idx not in test_pair_idx]
     val_img_idx = [idx for idx in range(N) if idx not in test_img_idx]
     num_test_pair, num_val_pair = len(test_pair_idx), len(val_pair_idx)
     num_test_img, num_val_img = len(test_img_idx), len(val_img_idx)
@@ -62,12 +69,12 @@ def fold10(features, cache_fn='lfw_result.txt', silent=False):
     val_similarity = similarity[val_pair_idx]
     # labels of validation set
     val_label = np.zeros((len(val_pair_idx), ), dtype=bool)
-    val_label[0 : len(val_pair_idx) / 2] = True
+    val_label[0 : len(val_pair_idx) // 2] = True
     # tune the best thres
     best_thres = tune_thres(val_similarity, val_label)
     # test using the best threshold
     test_label = np.zeros((num_test_pair,), bool) # number of testing pairs is half of the  #(testing images)
-    test_label[0:num_test_pair / 2] = True            # fist half of the pairs are of the same person
+    test_label[0:num_test_pair // 2] = True            # fist half of the pairs are of the same person
     test_similarity = similarity[test_pair_idx]
     predict = test_similarity >= best_thres
     test_acc = np.mean(np.float32(predict == test_label))
@@ -83,3 +90,7 @@ def fold10(features, cache_fn='lfw_result.txt', silent=False):
     print("Done, evaluation results have been saved at \"%s\"" % cache_fn)
   return cache_data[0:10, 1].mean()
 
+
+if __name__ == "__main__":
+    features = np.random.randn(12000, 512)
+    fold10(features)
